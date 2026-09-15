@@ -1,0 +1,22 @@
+{
+  "name": "ds_raw_extratos",
+  "properties": {
+    "description": "Zona raw imutável, particionada pela data de ingestão.",
+    "linkedServiceName": { "referenceName": "ls_adls_lake", "type": "LinkedServiceReference" },
+    "parameters": {
+      "ingest_date": { "type": "string" }
+    },
+    "type": "Binary",
+    "typeProperties": {
+      "location": {
+        "type": "AzureBlobFSLocation",
+        "fileSystem": "raw",
+        "folderPath": {
+          "value": "@concat('extratos/ingest_date=', dataset().ingest_date)",
+          "type": "Expression"
+        }
+      }
+    },
+    "annotations": ["smart-ticket-fraud"]
+  }
+}

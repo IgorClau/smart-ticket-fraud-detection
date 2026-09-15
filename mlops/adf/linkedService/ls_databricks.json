@@ -1,0 +1,23 @@
+{
+  "name": "ls_databricks",
+  "properties": {
+    "description": "Workspace Databricks. MSI do ADF (Contributor no workspace) e job cluster efêmero por execução.",
+    "type": "AzureDatabricks",
+    "typeProperties": {
+      "domain": "https://adb-0000000000000000.0.azuredatabricks.net",
+      "authentication": "MSI",
+      "workspaceResourceId": "/subscriptions/<subscription-id>/resourceGroups/rg-smart-ticket-fraud/providers/Microsoft.Databricks/workspaces/dbw-smart-ticket-fraud",
+      "newClusterVersion": "16.4.x-scala2.12",
+      "newClusterNumOfWorker": "1:4",
+      "newClusterNodeType": "Standard_D4ds_v5",
+      "newClusterSparkConf": {
+        "spark.sql.shuffle.partitions": "64",
+        "spark.databricks.delta.optimizeWrite.enabled": "true"
+      },
+      "newClusterSparkEnvVars": {
+        "PYSPARK_PYTHON": "/databricks/python3/bin/python3"
+      }
+    },
+    "annotations": ["smart-ticket-fraud"]
+  }
+}

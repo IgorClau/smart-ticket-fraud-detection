@@ -1,0 +1,16 @@
+{
+  "name": "ds_landing_extratos",
+  "properties": {
+    "description": "Pasta de chegada: extratos .xlsx e CSVs de manifesto/rótulos depositados pelo sistema de bilhetagem.",
+    "linkedServiceName": { "referenceName": "ls_adls_lake", "type": "LinkedServiceReference" },
+    "type": "Binary",
+    "typeProperties": {
+      "location": {
+        "type": "AzureBlobFSLocation",
+        "fileSystem": "landing",
+        "folderPath": "viacard"
+      }
+    },
+    "annotations": ["smart-ticket-fraud"]
+  }
+}

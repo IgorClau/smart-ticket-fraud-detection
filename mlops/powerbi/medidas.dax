@@ -1,0 +1,50 @@
+// Medidas do modelo semântico "Smart Ticket Fraud" (Power BI).
+// Tabelas: fato_embarques_diario, fato_recargas_mensal, card_scores (dimensão cartão), dim_linha, dim_calendario.
+
+Embarques = SUM ( fato_embarques_diario[n_embarques] )
+
+Embarques Pagos = SUM ( fato_embarques_diario[n_debitos] )
+
+Receita = SUM ( fato_embarques_diario[valor_debitado] )
+
+Ticket Médio = DIVIDE ( [Receita], [Embarques Pagos] )
+
+Cartões Ativos = DISTINCTCOUNT ( fato_embarques_diario[card_id] )
+
+% Embarques Noturnos = DIVIDE ( SUM ( fato_embarques_diario[n_noite] ), [Embarques] )
+
+% Erros de Validador = DIVIDE ( SUM ( fato_embarques_diario[n_erros] ), [Embarques] )
+
+Recarregado = SUM ( fato_recargas_mensal[valor_recarregado] )
+
+Cartões em Alerta = CALCULATE ( DISTINCTCOUNT ( card_scores[card_id] ), card_scores[alerta] = 1 )
+
+% Cartões em Alerta = DIVIDE ( [Cartões em Alerta], DISTINCTCOUNT ( card_scores[card_id] ) )
+
+Receita em Cartões em Alerta =
+CALCULATE ( [Receita], card_scores[alerta] = 1 )
+
+Score Médio = AVERAGE ( card_scores[anomaly_score] )
+
+// ---- avaliação (só no dataset sintético, que tem rótulo) ----------------------
+Fraudes Reais = CALCULATE ( DISTINCTCOUNT ( card_scores[card_id] ), card_scores[is_fraude] = 1 )
+
+Precisão da Fila =
+DIVIDE (
+    CALCULATE ( DISTINCTCOUNT ( card_scores[card_id] ), card_scores[alerta] = 1, card_scores[is_fraude] = 1 ),
+    [Cartões em Alerta]
+)
+
+Recall da Fila =
+DIVIDE (
+    CALCULATE ( DISTINCTCOUNT ( card_scores[card_id] ), card_scores[alerta] = 1, card_scores[is_fraude] = 1 ),
+    [Fraudes Reais]
+)
+
+Embarques MoM % =
+VAR atual = [Embarques]
+VAR anterior = CALCULATE ( [Embarques], DATEADD ( dim_calendario[Data], -1, MONTH ) )
+RETURN DIVIDE ( atual - anterior, anterior )
+
+Embarques Média Móvel 7d =
+AVERAGEX ( DATESINPERIOD ( dim_calendario[Data], MAX ( dim_calendario[Data] ), -7, DAY ), [Embarques] )

@@ -1,0 +1,11 @@
+{
+  "name": "ls_adls_lake",
+  "properties": {
+    "description": "ADLS Gen2 do projeto (containers landing, raw e lakehouse). Autenticação pela identidade gerenciada do ADF.",
+    "type": "AzureBlobFS",
+    "typeProperties": {
+      "url": "https://stfdatalake.dfs.core.windows.net"
+    },
+    "annotations": ["smart-ticket-fraud"]
+  }
+}

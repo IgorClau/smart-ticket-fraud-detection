@@ -1,0 +1,132 @@
+{
+  "name": "pl_medallion_smart_ticket",
+  "properties": {
+    "description": "Landing -> raw (Copy) -> bronze -> silver (qualidade bloqueante) -> gold -> treino/score. Espelho de mlops/pipeline.yml.",
+    "parameters": {
+      "lake_root": { "type": "string", "defaultValue": "abfss://lakehouse@stfdatalake.dfs.core.windows.net" },
+      "raw_root": { "type": "string", "defaultValue": "abfss://raw@stfdatalake.dfs.core.windows.net/extratos" },
+      "bases_dir": { "type": "string", "defaultValue": "/Workspace/Repos/smart-ticket-fraud-detection/data/synthetic/bases" },
+      "repo_path": { "type": "string", "defaultValue": "/Repos/smart-ticket-fraud-detection" }
+    },
+    "variables": {
+      "ingest_date": { "type": "String" }
+    },
+    "activities": [
+      {
+        "name": "DefinirDataIngestao",
+        "type": "SetVariable",
+        "typeProperties": {
+          "variableName": "ingest_date",
+          "value": { "value": "@formatDateTime(pipeline().TriggerTime, 'yyyy-MM-dd')", "type": "Expression" }
+        }
+      },
+      {
+        "name": "CopiarLandingParaRaw",
+        "description": "Cópia binária (sem parsing) preservando a estrutura; valida consistência dos arquivos.",
+        "type": "Copy",
+        "dependsOn": [ { "activity": "DefinirDataIngestao", "dependencyConditions": ["Succeeded"] } ],
+        "policy": { "timeout": "0.02:00:00", "retry": 2, "retryIntervalInSeconds": 120 },
+        "typeProperties": {
+          "source": {
+            "type": "BinarySource",
+            "storeSettings": { "type": "AzureBlobFSReadSettings", "recursive": true, "wildcardFileName": "*" }
+          },
+          "sink": {
+            "type": "BinarySink",
+            "storeSettings": { "type": "AzureBlobFSWriteSettings", "copyBehavior": "PreserveHierarchy" }
+          },
+          "validateDataConsistency": true,
+          "enableStaging": false
+        },
+        "inputs": [ { "referenceName": "ds_landing_extratos", "type": "DatasetReference" } ],
+        "outputs": [
+          {
+            "referenceName": "ds_raw_extratos",
+            "type": "DatasetReference",
+            "parameters": { "ingest_date": { "value": "@variables('ingest_date')", "type": "Expression" } }
+          }
+        ]
+      },
+      {
+        "name": "Bronze",
+        "type": "DatabricksNotebook",
+        "dependsOn": [ { "activity": "CopiarLandingParaRaw", "dependencyConditions": ["Succeeded"] } ],
+        "policy": { "timeout": "0.02:00:00", "retry": 1, "retryIntervalInSeconds": 300 },
+        "linkedServiceName": { "referenceName": "ls_databricks", "type": "LinkedServiceReference" },
+        "typeProperties": {
+          "notebookPath": { "value": "@concat(pipeline().parameters.repo_path, '/src/data_pipeline/spark/01_bronze_ingest')", "type": "Expression" },
+          "baseParameters": {
+            "lake_root": { "value": "@pipeline().parameters.lake_root", "type": "Expression" },
+            "raw_path": { "value": "@concat(pipeline().parameters.raw_root, '/ingest_date=', variables('ingest_date'))", "type": "Expression" },
+            "batch_id": { "value": "@pipeline().RunId", "type": "Expression" }
+          },
+          "libraries": [
+            { "pypi": { "package": "python-calamine==0.8.2" } },
+            { "pypi": { "package": "PyYAML==6.0.3" } }
+          ]
+        }
+      },
+      {
+        "name": "Silver",
+        "type": "DatabricksNotebook",
+        "dependsOn": [ { "activity": "Bronze", "dependencyConditions": ["Succeeded"] } ],
+        "policy": { "timeout": "0.02:00:00", "retry": 0 },
+        "linkedServiceName": { "referenceName": "ls_databricks", "type": "LinkedServiceReference" },
+        "typeProperties": {
+          "notebookPath": { "value": "@concat(pipeline().parameters.repo_path, '/src/data_pipeline/spark/02_silver_transform')", "type": "Expression" },
+          "baseParameters": {
+            "lake_root": { "value": "@pipeline().parameters.lake_root", "type": "Expression" },
+            "bases_dir": { "value": "@pipeline().parameters.bases_dir", "type": "Expression" }
+          },
+          "libraries": [ { "pypi": { "package": "openpyxl==3.1.5" } }, { "pypi": { "package": "PyYAML==6.0.3" } } ]
+        }
+      },
+      {
+        "name": "Gold",
+        "type": "DatabricksNotebook",
+        "dependsOn": [ { "activity": "Silver", "dependencyConditions": ["Succeeded"] } ],
+        "policy": { "timeout": "0.02:00:00", "retry": 1, "retryIntervalInSeconds": 300 },
+        "linkedServiceName": { "referenceName": "ls_databricks", "type": "LinkedServiceReference" },
+        "typeProperties": {
+          "notebookPath": { "value": "@concat(pipeline().parameters.repo_path, '/src/data_pipeline/spark/03_gold_features')", "type": "Expression" },
+          "baseParameters": {
+            "lake_root": { "value": "@pipeline().parameters.lake_root", "type": "Expression" }
+          },
+          "libraries": [ { "pypi": { "package": "PyYAML==6.0.3" } } ]
+        }
+      },
+      {
+        "name": "TreinoScore",
+        "type": "DatabricksNotebook",
+        "dependsOn": [ { "activity": "Gold", "dependencyConditions": ["Succeeded"] } ],
+        "policy": { "timeout": "0.01:00:00", "retry": 1, "retryIntervalInSeconds": 300 },
+        "linkedServiceName": { "referenceName": "ls_databricks", "type": "LinkedServiceReference" },
+        "typeProperties": {
+          "notebookPath": { "value": "@concat(pipeline().parameters.repo_path, '/src/data_pipeline/spark/04_train_score')", "type": "Expression" },
+          "baseParameters": {
+            "lake_root": { "value": "@pipeline().parameters.lake_root", "type": "Expression" }
+          },
+          "libraries": [
+            { "pypi": { "package": "scikit-learn==1.9.1" } },
+            { "pypi": { "package": "shap==0.52.0" } },
+            { "pypi": { "package": "tabulate==0.10.0" } },
+            { "pypi": { "package": "PyYAML==6.0.3" } }
+          ]
+        }
+      },
+      {
+        "name": "FalhaNaQualidadeOuProcessamento",
+        "description": "Marca a execução como falha com mensagem legível (monitorada por alerta do Azure Monitor).",
+        "type": "Fail",
+        "dependsOn": [
+          { "activity": "Silver", "dependencyConditions": ["Failed"] }
+        ],
+        "typeProperties": {
+          "message": { "value": "@concat('Silver falhou (possível checagem de qualidade bloqueante). RunId: ', pipeline().RunId)", "type": "Expression" },
+          "errorCode": "DQ_SILVER"
+        }
+      }
+    ],
+    "annotations": ["smart-ticket-fraud", "medallion"]
+  }
+}
