@@ -1,0 +1,61 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write        # login no Azure via OIDC (sem segredo de longa duração)
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+          cache: pip
+      - run: pip install -r requirements.txt
+      - name: Testes (gerador, ingestão, silver + qualidade, features, modelo, API)
+        run: pytest -q
+
+  docker:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build da imagem da API
+        run: docker build -f docker/Dockerfile -t stf-api:${{ github.sha }} .
+      - name: Smoke test do container
+        run: |
+          docker run -d --name api -p 8000:8000 stf-api:${{ github.sha }}
+          for i in $(seq 1 30); do curl -fs localhost:8000/health && break; sleep 2; done
+          curl -fs localhost:8000/health | grep '"modelo_carregado":true'
+          docker logs api
+
+  deploy:
+    # Ative criando a variável de repositório AZURE_DEPLOY=true e os segredos do OIDC.
+    needs: docker
+    if: github.ref == 'refs/heads/main' && vars.AZURE_DEPLOY == 'true'
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+      - uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      - name: Build no ACR
+        run: >
+          az acr build --registry ${{ vars.ACR_NAME }}
+          --image stf-api:${{ github.sha }} --file docker/Dockerfile .
+      - name: Nova revisão no Container Apps
+        run: >
+          az containerapp update --name ${{ vars.CONTAINERAPP_NAME }}
+          --resource-group ${{ vars.RESOURCE_GROUP }}
+          --image ${{ vars.ACR_NAME }}.azurecr.io/stf-api:${{ github.sha }}

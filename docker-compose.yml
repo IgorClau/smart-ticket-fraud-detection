@@ -1,0 +1,50 @@
+# Ambiente local.
+#   docker compose up -d api postgres          API em :8000 e Postgres em :5432
+#   docker compose --profile spark run --rm spark   valida os notebooks Databricks (Spark + Delta)
+services:
+  api:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+    image: smart-ticket-fraud-api:local
+    ports:
+      - "8000:8000"
+    restart: unless-stopped
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: bilhetagem
+      POSTGRES_USER: stf
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-stf_local}   # só para uso local
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./src/data_pipeline/sql/01_schema.sql:/docker-entrypoint-initdb.d/01_schema.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U stf -d bilhetagem"]
+      interval: 5s
+      retries: 10
+
+  spark:
+    profiles: ["spark"]
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.spark
+    image: smart-ticket-fraud-spark:local
+    working_dir: /workspace
+    volumes:
+      - .:/workspace
+    environment:
+      LAKE_ROOT: /workspace/data/processed/lakehouse
+      RAW_PATH: /workspace/data/raw/viacard_v44
+      BASES_DIR: /workspace/data/synthetic/bases
+      SPARK_DRIVER_MEMORY: 6g
+    command: >
+      bash -lc "python src/data_pipeline/spark/01_bronze_ingest.py
+      && python src/data_pipeline/spark/02_silver_transform.py
+      && python src/data_pipeline/spark/03_gold_features.py"
+
+volumes:
+  pgdata:

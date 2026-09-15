@@ -1,0 +1,33 @@
+# Ambiente de desenvolvimento, pipeline local, testes e notebooks (Python 3.14).
+# API em produção: requirements-api.txt · Spark/Delta: requirements-spark.txt
+
+# dados
+pandas==3.0.5
+numpy==2.5.3
+pyarrow==25.0.1
+python-calamine==0.8.2
+openpyxl==3.1.5
+PyYAML==6.0.3
+
+# modelagem
+scikit-learn==1.9.1
+shap==0.52.0
+joblib==1.6.0
+matplotlib==3.11.2
+tabulate==0.10.0
+
+# API
+fastapi==0.141.1
+uvicorn==0.53.0
+pydantic==2.13.5
+httpx==0.28.1
+
+# SQL (Fundamentos: Postgres)
+psycopg2-binary==2.9.13
+SQLAlchemy==2.0.53
+
+# testes e notebooks
+pytest==9.1.1
+nbformat==5.11.1
+nbconvert==7.17.1
+ipykernel==7.3.0
