@@ -1,0 +1,127 @@
+{
+  "n_cartoes": 2500,
+  "rotulado": true,
+  "teste": {
+    "Isolation Forest (produção)": {
+      "n": 750,
+      "prevalencia": 0.248,
+      "roc_auc": 0.9164,
+      "pr_auc": 0.8456,
+      "fila_auditoria": 75,
+      "precisao_topk": 0.9733,
+      "recall_topk": 0.3925,
+      "f1_topk": 0.5594,
+      "lift_topk": 3.92,
+      "confusao": {
+        "tn": 562,
+        "fp": 2,
+        "fn": 113,
+        "tp": 73
+      }
+    },
+    "LOF": {
+      "n": 750,
+      "prevalencia": 0.248,
+      "roc_auc": 0.8036,
+      "pr_auc": 0.6376,
+      "fila_auditoria": 75,
+      "precisao_topk": 0.8267,
+      "recall_topk": 0.3333,
+      "f1_topk": 0.4751,
+      "lift_topk": 3.33,
+      "confusao": {
+        "tn": 551,
+        "fp": 13,
+        "fn": 124,
+        "tp": 62
+      }
+    },
+    "Gradient Boosting supervisionado (teto)": {
+      "n": 750,
+      "prevalencia": 0.248,
+      "roc_auc": 0.9741,
+      "pr_auc": 0.9642,
+      "fila_auditoria": 75,
+      "precisao_topk": 1.0,
+      "recall_topk": 0.4032,
+      "f1_topk": 0.5747,
+      "lift_topk": 4.03,
+      "confusao": {
+        "tn": 564,
+        "fp": 0,
+        "fn": 111,
+        "tp": 75
+      }
+    }
+  },
+  "teste_fila_do_tamanho_da_prevalencia": {
+    "Isolation Forest (produção)": {
+      "n": 750,
+      "prevalencia": 0.248,
+      "roc_auc": 0.9164,
+      "pr_auc": 0.8456,
+      "fila_auditoria": 186,
+      "precisao_topk": 0.7527,
+      "recall_topk": 0.7527,
+      "f1_topk": 0.7527,
+      "lift_topk": 3.04,
+      "confusao": {
+        "tn": 518,
+        "fp": 46,
+        "fn": 46,
+        "tp": 140
+      }
+    },
+    "LOF": {
+      "n": 750,
+      "prevalencia": 0.248,
+      "roc_auc": 0.8036,
+      "pr_auc": 0.6376,
+      "fila_auditoria": 186,
+      "precisao_topk": 0.629,
+      "recall_topk": 0.629,
+      "f1_topk": 0.629,
+      "lift_topk": 2.54,
+      "confusao": {
+        "tn": 495,
+        "fp": 69,
+        "fn": 69,
+        "tp": 117
+      }
+    },
+    "Gradient Boosting supervisionado (teto)": {
+      "n": 750,
+      "prevalencia": 0.248,
+      "roc_auc": 0.9741,
+      "pr_auc": 0.9642,
+      "fila_auditoria": 186,
+      "precisao_topk": 0.9032,
+      "recall_topk": 0.9032,
+      "f1_topk": 0.9032,
+      "lift_topk": 3.64,
+      "confusao": {
+        "tn": 546,
+        "fp": 18,
+        "fn": 18,
+        "tp": 168
+      }
+    }
+  },
+  "recall_por_classe": {
+    "Fraudulento": 0.451,
+    "Suspeito": 0.0
+  },
+  "clusters": {
+    "k": 4,
+    "silhouette": {
+      "3": 0.1835,
+      "4": 0.185,
+      "5": 0.1383,
+      "6": 0.1461,
+      "7": 0.1543,
+      "8": 0.1183
+    }
+  },
+  "n_alertas": 250,
+  "segundos": 16.4
+}

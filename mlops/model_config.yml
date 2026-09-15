@@ -1,0 +1,84 @@
+# Configuração do modelo de detecção de fraude.
+# Lida por src/training/train.py e pela API (src/api) — mudar aqui muda os dois.
+
+model_name: smart-ticket-fraud-iforest
+version: "1.0.0"
+
+# Colunas de gold/card_features usadas pelo modelo. A ordem é a do vetor de entrada da API.
+features:
+  # volume e rotina
+  - embarques_por_dia_ativo
+  - pico_embarques_dia
+  - pct_dias_3mais_embarques
+  - pct_dias_ativos
+  - maior_sequencia_dias
+  - maior_hiato_dias
+  # diversidade
+  - n_operadoras
+  - n_linhas
+  - pct_linha_principal
+  - pct_intermunicipal
+  - pct_veiculo_mais_usado
+  # horário
+  - pct_noite
+  - pct_meio_dia
+  - pct_fim_semana
+  - hora_std
+  # reembarque
+  - pct_reembarque_5min
+  - pct_replay
+  - pct_troca_operadora_15min
+  - pct_troca_linha_mesmo_dia
+  # validador
+  - pct_erro_leitura
+  - pct_erro_gravacao
+  - pct_saldo_insuficiente
+  - pct_inconsistencia_saldo
+  # tarifa
+  - pct_tarifa_divergente
+  # recargas e saldo
+  - recarga_media
+  - pct_recarga_valor_redondo
+  - pct_recarga_sem_dupla_passada
+  - n_empresas_recarga
+  - pct_recarga_empresa_rara
+  - razao_recarga_consumo
+  - saldo_medio
+  - n_admin_pendentes
+  # picos mensais
+  - pico_mensal_razao_embarques
+  - pico_mensal_fora_linha_principal
+  - pico_mensal_pct_noite
+  - pico_mensal_pct_meio_dia
+
+# Modelo de produção: não supervisionado (em operação real quase não há rótulo).
+isolation_forest:
+  n_estimators: 400
+  max_samples: 512
+  max_features: 1.0
+  random_state: 42
+
+# Comparações registradas no relatório (não vão para a API).
+benchmarks:
+  local_outlier_factor:
+    n_neighbors: 35
+  supervised_gradient_boosting:     # teto de sinal: o quanto os rótulos são aprendíveis
+    max_iter: 300
+    learning_rate: 0.05
+    max_leaf_nodes: 31
+    random_state: 42
+
+evaluation:
+  test_size: 0.3                    # split estratificado por cartão (entidade)
+  random_state: 42
+  # Fila de auditoria: quantos cartões o time consegue revisar por ciclo.
+  audit_fraction: 0.10              # top 10% dos scores viram alerta
+
+clustering:
+  k_min: 3
+  k_max: 8
+  random_state: 42
+
+explainability:
+  shap_background: 200              # amostra de fundo p/ SHAP
+  top_k_reasons: 4

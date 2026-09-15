@@ -1,0 +1,13 @@
+tipo_fraude,cartoes,detectados,recall,score_mediano
+Desvio de finalidade,28,21,0.75,0.4795
+Venda de créditos,27,19,0.704,0.4905
+Clonagem,28,18,0.643,0.4762
+Replay,29,17,0.586,0.4688
+Uso em férias,27,13,0.481,0.4644
+Uso offline,25,12,0.48,0.4617
+Recarga clandestina,30,13,0.433,0.4602
+Uso em licença,28,10,0.357,0.4536
+Conluio operacional,21,7,0.333,0.4613
+Empréstimo do cartão,21,5,0.238,0.4425
+Endereço falso,34,7,0.206,0.4246
+Uso de gratuidade associado ao VT,40,8,0.2,0.4313

@@ -1,0 +1,5 @@
+cluster,cartoes,embarques_por_dia_ativo,pct_dias_ativos,pct_linha_principal,n_linhas,pct_fim_semana,pct_noite,pct_meio_dia,maior_hiato_dias,saldo_medio,taxa_fraude
+0,1538,2.064,0.804,0.971,2.0,0.311,0.003,0.016,6.0,143.558,0.124
+1,311,2.07,0.805,0.354,9.0,0.305,0.003,0.027,6.0,142.846,0.277
+2,425,2.07,0.44,0.892,2.0,0.281,0.003,0.049,10.0,84.664,0.275
+3,226,2.189,0.804,0.898,10.0,0.307,0.008,0.049,6.0,153.081,1.0
