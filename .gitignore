@@ -1,0 +1,21 @@
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ipynb_checkpoints/
+.venv/
+venv/
+
+# dados volumosos (regeneráveis: gerador + pipeline)
+data/raw/*
+!data/raw/README.md
+data/processed/*
+!data/processed/README.md
+!data/processed/gold/
+data/processed/gold/*
+!data/processed/gold/card_scores.parquet
+
+# segredos e locais
+.env
+*.local.json
+.databrickscfg

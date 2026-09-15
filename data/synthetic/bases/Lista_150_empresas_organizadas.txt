@@ -1,0 +1,177 @@
+================================================================================
+LISTA ORGANIZADA DE EMPRESAS POR SETOR
+================================================================================
+
+1. COMÉRCIO DE VESTUÁRIO (1-20)
+--------------------------------------------------------------------------------
+01. Aurora Moda
+02. Estilo Urbano Confecções
+03. Bella Trama Fashion
+04. Horizonte Jeans
+05. Alfa Vestuário
+06. Prime Look Store
+07. Essência Moda
+08. Vértice Fashion
+09. Novo Closet
+10. Moda Viva Confecções
+11. Elegance Wear
+12. Central do Vestir
+13. Nova Estação Moda
+14. Luxo Casual
+15. Via Fashion Brasil
+16. Ponto da Moda
+17. Urban Line
+18. Casa do Jeans
+19. Elegance Boutique
+20. Vest Brasil
+
+2. VAREJO GERAL (21-40)
+--------------------------------------------------------------------------------
+21. MaxCompra
+22. Super Oferta Center
+23. MegaMix Varejo
+24. Ideal Comercial
+25. Brasil Shopping Center
+26. Compra Fácil
+27. Ponto Econômico
+28. Alfa Varejo
+29. Central das Compras
+30. Mercado Popular
+31. Nova Opção Comercial
+32. Casa Econômica
+33. Rede Consumo
+34. Compra Certa
+35. Bom Negócio Varejo
+36. Varejão Nacional
+37. União Comercial
+38. Comercial Horizonte
+39. Mix Center
+40. Prime Comércio
+
+3. ATACADO E DISTRIBUIÇÃO (41-60)
+--------------------------------------------------------------------------------
+41. Atacadão Nacional
+42. Distribuidora Alfa
+43. Horizonte Distribuição
+44. Mega Supply
+45. Central Atacadista
+46. Rede Distribuição Brasil
+47. Max Atacado
+48. União Distribuidora
+49. Prime Atacadista
+50. Nova Distribuição
+51. Forte Supply
+52. Brasil Food Distribuição
+53. Alfa Suprimentos
+54. Elite Distribuidora
+55. Capital Atacado
+56. LogiSupply
+57. Delta Distribuição
+58. Comercial Atacadista Sul
+59. Master Distribuição
+60. Integra Supply
+
+4. SUPERMERCADOS E MERCADOS (61-80)
+--------------------------------------------------------------------------------
+61. SuperMais
+62. Mercado Horizonte
+63. Rede Bom Preço
+64. Família Supermercados
+65. Central Market
+66. Econômico Super
+67. Mercado Ideal
+68. Super União
+69. Brasil Market
+70. Rede Nova Compra
+71. Mais Econômico
+72. Ponto do Mercado
+73. Mercado Popular Brasil
+74. Hiper Central
+75. Bom Dia Supermercados
+76. Viver Bem Market
+77. Alfa Super
+78. Cidade Market
+79. Top Mercado
+80. Mega Super
+
+5. SIDERURGIA E METALURGIA (81-100)
+--------------------------------------------------------------------------------
+81. Aço Nacional
+82. Metal Forte
+83. Siderúrgica Horizonte
+84. Alfa Steel
+85. Brasil Aços Especiais
+86. Prime Metal
+87. FerroVale
+88. União Siderurgia
+89. Metalúrgica Central
+90. Nova Liga Metais
+91. Aço Premium
+92. Delta Steel
+93. Master Metal
+94. Industrial FerroSul
+95. Horizonte Steel
+96. Integra Metais
+97. Capital Siderurgia
+98. Metal Brasil
+99. Titan Aços
+100. Estrutural Metal
+
+6. TRANSPORTE E LOGÍSTICA (101-120)
+--------------------------------------------------------------------------------
+101. Logística Express
+102. TransBrasil Cargo
+103. Horizonte Transportes
+104. Alfa Log
+105. Prime Cargo
+106. Integra Logística
+107. RodoMais Transportes
+108. Delta Transportes
+109. Capital Log
+110. União Express
+111. Carga Forte
+112. Via Norte Logística
+113. Master Freight
+114. Brasil Cargo
+115. EcoLog Transportes
+116. Rota Sul Logística
+117. Veloz Transportes
+118. MaxLog
+119. Nova Rota Express
+120. Integra Freight
+
+7. CONSTRUÇÃO CIVIL (121-140)
+--------------------------------------------------------------------------------
+121. Construtora Horizonte
+122. Alfa Engenharia
+123. Prime Obras
+124. Capital Construções
+125. Nova Estrutura
+126. União Engenharia
+127. Construmax
+128. Forte Engenharia
+129. Delta Construções
+130. Edifica Brasil
+131. Vertical Engenharia
+132. Horizonte Infraestrutura
+133. Integra Obras
+134. Urbaniza Engenharia
+135. Master Construções
+136. Construtora Alfa Sul
+137. Brasil Infra
+138. Evolução Engenharia
+139. Concreto Forte
+140. Apex Construções
+
+8. TICKETEIRAS E BENEFÍCIOS (141-150)
+--------------------------------------------------------------------------------
+141. Beneflex
+142. ValeMais Benefícios
+143. Ticket Fácil
+144. MobiliCard
+145. SmartBenefícios
+146. BenefPay
+147. UrbanCard
+148. FlexVale Soluções
+149. MoveBenefícios
+150. TicketHub Benefícios

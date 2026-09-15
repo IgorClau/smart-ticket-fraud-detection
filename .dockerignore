@@ -1,0 +1,12 @@
+# Contexto mínimo: só o que as imagens copiam.
+**
+!requirements-api.txt
+!requirements-spark.txt
+!src/**
+!mlops/model_config.yml
+!mlops/pipeline.yml
+!mlops/artifacts/**
+!data/synthetic/bases/**
+!data/processed/gold/card_scores.parquet
+**/__pycache__
+**/*.pyc
