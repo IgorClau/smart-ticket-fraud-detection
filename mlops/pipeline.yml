@@ -1,0 +1,41 @@
+# Pipeline medallion do Smart Ticket Fraud Detection.
+#
+# O mesmo arquivo descreve o fluxo nos dois ambientes:
+#   - local:  `python -m src.pipeline` executa os estágios em sequência (pandas);
+#   - Azure:  cada estágio vira uma atividade do ADF (mlops/adf/pipeline_medallion.json)
+#             que chama o notebook Databricks correspondente (src/data_pipeline/spark/).
+#
+# Caminhos relativos são resolvidos a partir da raiz do repositório.
+
+name: smart-ticket-fraud-detection
+
+paths:
+  raw_dir: data/raw/viacard_v44     # extratos .xlsx + manifesto/rótulos (python -m src.data_generator.run)
+  bronze_dir: data/processed/bronze
+  silver_dir: data/processed/silver
+  gold_dir: data/processed/gold
+  artifacts_dir: mlops/artifacts
+  reports_dir: mlops/reports
+
+ingest:
+  file_glob: "extrato_de_utilizacao_*.xlsx"
+  workers: 7                        # processos paralelos na leitura dos .xlsx
+  part_size: 250                    # arquivos por part-file parquet na bronze
+
+stages:
+  - name: bronze_ingest
+    description: .xlsx brutos -> tabelas bronze (fidelidade ao arquivo, sem regra de negócio)
+    local: src.data_pipeline.ingest
+    databricks_notebook: src/data_pipeline/spark/01_bronze_ingest.py
+  - name: silver_transform
+    description: tipagem, parsing da descrição, deduplicação e checagens de qualidade
+    local: src.data_pipeline.silver
+    databricks_notebook: src/data_pipeline/spark/02_silver_transform.py
+  - name: gold_features
+    description: uma linha por cartão com as features de comportamento + agregados para o Power BI
+    local: src.feature_engineering.build
+    databricks_notebook: src/data_pipeline/spark/03_gold_features.py
+  - name: train_evaluate
+    description: Isolation Forest, métricas com ground truth, SHAP e clusters de perfil
+    local: src.training.train
+    databricks_notebook: null         # roda no job de ML (mesmo código Python, cluster single-node)
