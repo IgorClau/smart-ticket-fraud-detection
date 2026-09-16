@@ -72,14 +72,19 @@ def train(gold_dir: Path, silver_dir: Path, artifacts_dir: Path, reports_dir: Pa
     reports_dir.mkdir(parents=True, exist_ok=True)
 
     df = load_dataset(gold_dir, silver_dir)
-    rotulado = "is_fraude" in df.columns and df["is_fraude"].notna().all()
-    metrics: dict = {"n_cartoes": len(df), "rotulado": bool(rotulado)}
+    # A avaliação usa só os cartões COM rótulo (pode ser um subconjunto — lotes antigos
+    # não têm rótulo); o modelo de produção segue treinando em todos, sem rótulo.
+    rot = df[df["is_fraude"].notna()].copy() if "is_fraude" in df.columns else df.iloc[0:0]
+    rotulado = len(rot) >= 200 and rot["is_fraude"].nunique() > 1
+    metrics: dict = {"n_cartoes": len(df), "rotulado": bool(rotulado),
+                     "cartoes_com_rotulo": int(len(rot)),
+                     "cobertura_rotulo": round(len(rot) / max(1, len(df)), 4)}
 
     # ---- avaliação honesta: treino/teste por cartão --------------------------
     if rotulado:
-        df["is_fraude"] = df["is_fraude"].astype(int)
-        tr, te = train_test_split(df, test_size=ev["test_size"], random_state=ev["random_state"],
-                                  stratify=df["is_fraude"])
+        rot["is_fraude"] = rot["is_fraude"].astype(int)
+        tr, te = train_test_split(rot, test_size=ev["test_size"], random_state=ev["random_state"],
+                                  stratify=rot["is_fraude"])
         det_eval = FraudDetector(feats, cfg["isolation_forest"]).fit(tr, audit)
         scores = _benchmarks(cfg, feats, det_eval, tr, te)
         y = te["is_fraude"].to_numpy()
@@ -123,14 +128,16 @@ def train(gold_dir: Path, silver_dir: Path, artifacts_dir: Path, reports_dir: Pa
     metrics["clusters"] = info
 
     if rotulado:
-        figures.score_distribution(scored, det.threshold, fig_dir / "score_distribuicao.png")
+        figures.score_distribution(scored[scored["classe"].notna()], det.threshold,
+                                   fig_dir / "score_distribuicao.png")
 
     # ---- persistência ----------------------------------------------------------
     out_cols = ["card_id", "nome", "anomaly_score", "percentil", "alerta", "rank", "cluster"]
     card_scores = scored[out_cols].merge(alertas_exp[["card_id", "motivo_principal", "principais_motivos"]],
                                          on="card_id", how="left")
-    if rotulado:
-        card_scores = card_scores.merge(df[["card_id", "classe", "is_fraude", "tipos_fraude"]], on="card_id")
+    if "is_fraude" in df.columns:
+        card_scores = card_scores.merge(df[["card_id", "classe", "is_fraude", "tipos_fraude"]],
+                                        on="card_id", how="left")
     card_scores.to_parquet(gold_dir / "card_scores.parquet", index=False)
 
     det.metadata = {

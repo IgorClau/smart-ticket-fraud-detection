@@ -52,6 +52,7 @@ DIGITS_RE = re.compile(r"(\d{3,})")
 
 TX_SCHEMA = pa.schema([
     ("card_id", pa.string()),
+    ("lote", pa.string()),
     ("event_ts", pa.timestamp("s")),
     ("tipo", pa.string()),
     ("status_emb", pa.string()),
@@ -67,6 +68,7 @@ TX_SCHEMA = pa.schema([
 
 ADMIN_SCHEMA = pa.schema([
     ("card_id", pa.string()),
+    ("lote", pa.string()),
     ("data_compra", pa.timestamp("s")),
     ("empresa", pa.string()),
     ("pedido", pa.string()),
@@ -159,16 +161,16 @@ def _parse_safe(path: str) -> dict:
     return out
 
 
-def _to_tables(results: list[dict], ingested_at: datetime) -> tuple[pa.Table, pa.Table]:
+def _to_tables(results: list[dict], ingested_at: datetime, lote: str) -> tuple[pa.Table, pa.Table]:
     tx_cols = {n: [] for n in TX_SCHEMA.names}
     adm_cols = {n: [] for n in ADMIN_SCHEMA.names}
     for r in results:
         for ts, tipo, st, desc, a, b, dc, vd, src_row in r["tx"]:
-            for k, v in zip(TX_SCHEMA.names, (r["card_id"], ts, tipo, st, desc, a, b, dc, vd,
+            for k, v in zip(TX_SCHEMA.names, (r["card_id"], lote, ts, tipo, st, desc, a, b, dc, vd,
                                               r["arquivo"], src_row, ingested_at)):
                 tx_cols[k].append(v)
         for data, emp, ped, sit, valor, src_row in r["admin"]:
-            for k, v in zip(ADMIN_SCHEMA.names, (r["card_id"], data, emp, ped, sit, valor,
+            for k, v in zip(ADMIN_SCHEMA.names, (r["card_id"], lote, data, emp, ped, sit, valor,
                                                  r["arquivo"], src_row, ingested_at)):
                 adm_cols[k].append(v)
     return (pa.table(tx_cols, schema=TX_SCHEMA), pa.table(adm_cols, schema=ADMIN_SCHEMA))
@@ -191,7 +193,8 @@ def load_labels(raw_dir: Path, files: pd.DataFrame) -> pd.DataFrame | None:
 
 
 def ingest(raw_dir: Path, bronze_dir: Path, workers: int, part_size: int,
-           file_glob: str, limit: int | None = None) -> dict:
+           file_glob: str, limit: int | None = None, lote: str | None = None) -> dict:
+    lote = lote or raw_dir.name
     files = sorted(str(p) for p in raw_dir.glob(file_glob))
     if limit:
         files = files[:limit]
@@ -214,7 +217,7 @@ def ingest(raw_dir: Path, bronze_dir: Path, workers: int, part_size: int,
         nonlocal part, n_tx, n_adm, buffer
         if not buffer:
             return
-        tx_t, adm_t = _to_tables(buffer, ingested_at)
+        tx_t, adm_t = _to_tables(buffer, ingested_at, lote)
         pq.write_table(tx_t, bronze_dir / "transactions" / f"part-{part:05d}.parquet")
         pq.write_table(adm_t, bronze_dir / "admin_pendentes" / f"part-{part:05d}.parquet")
         n_tx += tx_t.num_rows
@@ -235,22 +238,25 @@ def ingest(raw_dir: Path, bronze_dir: Path, workers: int, part_size: int,
     flush()
 
     files_df = pd.DataFrame(file_rows)
+    files_df["lote"] = lote
     files_df["_ingested_at"] = ingested_at
     files_df.to_parquet(bronze_dir / "files.parquet", index=False)
 
     labels = load_labels(raw_dir, files_df)
     if labels is not None:
+        labels["lote"] = lote
         labels.to_parquet(bronze_dir / "labels.parquet", index=False)
     rot_ev = raw_dir / "rotulos_eventos.csv"
     n_ev = 0
     if rot_ev.exists():
         lev = pd.read_csv(rot_ev, encoding="utf-8", dtype={"numero_cartao": str})
-        lev = lev[lev["arquivo"].isin(files_df["arquivo"])]
+        lev = lev[lev["arquivo"].isin(files_df["arquivo"])].copy()
+        lev["lote"] = lote
         lev.to_parquet(bronze_dir / "labels_eventos.parquet", index=False)
         n_ev = len(lev)
 
     summary = {
-        "arquivos": len(files), "com_erro": int(files_df["erro"].notna().sum()),
+        "lote": lote, "arquivos": len(files), "com_erro": int(files_df["erro"].notna().sum()),
         "cartoes": int(files_df["card_id"].nunique()), "transacoes": n_tx,
         "admin_pendentes": n_adm, "rotulados": 0 if labels is None else len(labels),
         "eventos_rotulados": n_ev, "segundos": round(time.time() - t0, 1),
@@ -266,9 +272,11 @@ def main() -> None:
     ap.add_argument("--bronze-dir", type=Path, default=config.path("bronze_dir"))
     ap.add_argument("--workers", type=int, default=min(cfg["workers"], os.cpu_count() or 1))
     ap.add_argument("--limit", type=int, default=None, help="lê só os N primeiros arquivos (debug)")
+    ap.add_argument("--lote", default=None,
+                    help="identificador da geração (padrão: nome da pasta); vira coluna e compõe o card_id")
     args = ap.parse_args()
     ingest(args.raw_dir.resolve(), args.bronze_dir, args.workers, cfg["part_size"],
-           cfg["file_glob"], args.limit)
+           cfg["file_glob"], args.limit, args.lote)
 
 
 if __name__ == "__main__":
