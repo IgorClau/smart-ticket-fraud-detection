@@ -19,3 +19,7 @@ data/processed/gold/*
 .env
 *.local.json
 .databrickscfg
+
+# artefatos e relatórios das execuções sobre os lotes antigos (derivados)
+mlops/artifacts_lotes/
+mlops/reports_lotes/
