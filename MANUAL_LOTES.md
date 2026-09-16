@@ -103,6 +103,27 @@ data/processed/lotes/
 Em cada `loteN/silver/` ficam ainda `transactions.parquet` (a tabela detalhada daquele lote),
 `quality_report.json` e, quando houver, `quarentena_cartoes.parquet`.
 
+### Resultado observado (execução completa, 7 workers)
+
+| Lote | Arquivos | Transações | Cartões na gold | Quarentena | Qualidade | Tempo |
+|---|---:|---:|---:|---:|---|---:|
+| lote1 | 500 | 1.556.799 | 469 | 31 | 19/20 | 2,1 min |
+| lote2 | 1.016 | 3.236.405 | 957 | 58 | 19/20 | 4,0 min |
+| lote3 | 1.016 | 3.229.625 | 948 | 67 | 19/20 | 4,3 min |
+| lote4 | 1.905 | 6.037.927 | 1.749 | 105 | 19/20 | 7,5 min |
+| lote5 | 2.270 | 7.139.173 | 2.121 | 126 | 19/20 | 8,8 min |
+| lote6 | 2.271 | 7.158.389 | 2.119 | 121 | 19/20 | 8,6 min |
+| lote7 | 2.269 | 7.162.599 | 2.122 | 122 | 19/20 | 8,5 min |
+| lote8 | 500 | 1.518.965 | 500 | 0 | 21/21 | 1,8 min |
+| lote9 | 2.070 | 6.151.318 | 2.043 | 0 | 21/21 | 7,2 min |
+| **Total** | **13.817** | **43.191.200** | **13.028** | **630 (4,6%)** | 9/9 lotes ok | **52,7 min** |
+
+Motivos da quarentena: 400 cartões com embarque sem tarifa e `D/C` incoerente, 225 com saldo acima do
+teto e 5 com os dois problemas. Nenhum arquivo falhou na leitura.
+
+A diferença entre arquivos e cartões vem de duas fontes, ambas tratadas sozinhas: **cópias do Windows**
+(`extrato_...(1).xlsx`, conteúdo idêntico) que a deduplicação da silver elimina, e os cartões em quarentena.
+
 ---
 
 ## 5. Conferir a qualidade
@@ -146,19 +167,45 @@ python -m src.training.train --gold-dir data/processed/lotes/consolidado/gold --
 Isso grava `consolidado/gold/card_scores.parquet` (score, percentil, alerta, cluster e motivo por cartão),
 além de `metrics.md`, `alertas_explicados.csv` e figuras em `mlops/reports_lotes`.
 
-> **Leia as métricas com cuidado.** A avaliação usa só os cartões dos lotes 8 e 9, cujos rótulos não têm
-> contrapartida observável no extrato. Espere ROC-AUC perto de 0,5 — isso mede a limitação daquela geração
-> de dados, não o modelo. Métrica de verdade só com o lote novo (`data/raw/viacard_v44`), onde a fraude é
-> materializada: ROC-AUC 0,916. Os scores dos lotes antigos continuam válidos como **ranking de anomalia**
-> para priorizar auditoria.
+Resultado observado: 13.028 cartões pontuados, **1.303 alertas** (top 10%), em 65 s.
+
+> **Leia as métricas com cuidado.** A avaliação usa só os 2.519 cartões rotulados (lotes 8 e 9), e esses
+> rótulos não têm contrapartida observável no extrato. O resultado medido foi:
+>
+> | Modelo | ROC-AUC | PR-AUC |
+> |---|---|---|
+> | Isolation Forest | 0,503 | 0,252 |
+> | LOF | 0,453 | 0,225 |
+> | Gradient Boosting supervisionado (teto) | 0,536 | 0,291 |
+>
+> Ou seja: **acaso**. Como até o modelo supervisionado, que enxerga os rótulos, fica em 0,536, a conclusão
+> é que o sinal não existe nos dados — não é limitação do modelo. Compare com o lote novo
+> (`data/raw/viacard_v44`), gerado com fraude materializada, onde o mesmo pipeline dá **ROC-AUC 0,916**.
+>
+> Os scores dos lotes antigos continuam úteis como **ranking de anomalia comportamental** para priorizar
+> auditoria; o que não dá é chamar de "detecção de fraude validada".
 
 ---
 
 ## 7. Levar para o Power BI
 
 ```bash
-python -m src.data_pipeline.export_bi --gold data/processed/lotes/consolidado/gold --out data/processed/powerbi --desde 2023-01-01
+python -m src.data_pipeline.export_bi --gold data/processed/lotes/consolidado/gold --out data/processed/powerbi
 ```
+
+Saída medida (20 s, 38 MB no total):
+
+| Arquivo | Linhas | Tamanho |
+|---|---:|---:|
+| `card_scores.parquet` | 13.028 | 0,6 MB |
+| `card_features.parquet` | 13.028 | 1,6 MB |
+| `fato_embarques_mensal.parquet` | 807.982 | 4,0 MB |
+| `fato_embarques_diario.parquet` | 16.010.833 | 29,5 MB |
+| `fato_recargas_mensal.parquet` | 740.966 | 3,4 MB |
+| `dim_linha.parquet` | 226 | 0,0 MB |
+
+Se o dashboard não precisar do histórico inteiro, corte o período com `--desde 2023-01-01` (o fato
+diário é o único realmente grande). Para CSV, acrescente `--formato csv`.
 
 O passo a passo no Power BI Desktop — conexão, relacionamentos, medidas e páginas — está em
 [`mlops/powerbi/README.md`](mlops/powerbi/README.md).

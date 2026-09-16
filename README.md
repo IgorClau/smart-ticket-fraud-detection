@@ -220,6 +220,11 @@ Para a detecção não ficar trivial, a v4.4 também adiciona **hábitos legíti
 gerador continua valendo para o comportamento legítimo, e a nova validação VF garante o limite de 15%.
 Os 2.500 extratos passaram em todas as validações.
 
+**A prova empírica.** Rodar o mesmo pipeline sobre as gerações antigas (lotes 1 a 9: 13.028 cartões,
+43,2 M de transações — veja o [Manual dos lotes](MANUAL_LOTES.md)) dá **ROC-AUC 0,503**, e o modelo
+supervisionado, que enxerga os rótulos, não passa de 0,536. O sinal não existia nos dados; com a v4.4,
+o mesmo código chega a 0,916.
+
 ---
 
 ## Pipeline medallion
