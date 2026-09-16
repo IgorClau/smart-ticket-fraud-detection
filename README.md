@@ -183,6 +183,10 @@ docker compose --profile spark run --rm spark pytest -q tests/test_spark_parity.
 
 Deploy no Azure (depois de `az login` e `databricks auth login`): [`mlops/infra/deploy.sh`](mlops/infra/deploy.sh).
 
+Para processar as gerações antigas de extratos (lotes 1 a 9, 13,8 mil cartões) e levar o resultado ao
+Power BI Desktop, siga o [**Manual dos lotes**](MANUAL_LOTES.md) e o
+[**guia do Power BI**](mlops/powerbi/README.md).
+
 ---
 
 ## Os dados: por que o gerador teve de mudar

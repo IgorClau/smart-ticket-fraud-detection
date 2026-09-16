@@ -36,8 +36,9 @@ def _copy(cur, table: str, df: pd.DataFrame) -> None:
     cur.copy_expert(f"COPY bilhetagem.{table} ({', '.join(df.columns)}) FROM STDIN WITH (FORMAT csv, NULL '\\N')", buf)
 
 
-def load(conn) -> None:
-    silver, gold = config.path("silver_dir"), config.path("gold_dir")
+def load(conn, silver: Path | None = None, gold: Path | None = None) -> None:
+    silver = silver or config.path("silver_dir")
+    gold = gold or config.path("gold_dir")
     with conn.cursor() as cur:
         cur.execute((SQL_DIR / "01_schema.sql").read_text(encoding="utf-8"))
         cur.execute("TRUNCATE bilhetagem.score_cartao, bilhetagem.rotulo_cartao, bilhetagem.transacao, "
@@ -81,11 +82,16 @@ def run_queries(conn, out: Path) -> None:
 def main() -> None:
     ap = argparse.ArgumentParser(description="silver/gold -> PostgreSQL")
     ap.add_argument("--run", action="store_true", help="só executa as perguntas (sem recarregar)")
+    ap.add_argument("--silver", type=Path, default=None,
+                    help="camada silver a carregar (padrão: a do pipeline.yml)")
+    ap.add_argument("--gold", type=Path, default=None,
+                    help="camada gold a carregar (padrão: a do pipeline.yml)")
+    ap.add_argument("--respostas", type=Path, default=SQL_DIR / "03_respostas.md")
     args = ap.parse_args()
     with psycopg2.connect(DSN) as conn:
         if not args.run:
-            load(conn)
-        run_queries(conn, SQL_DIR / "03_respostas.md")
+            load(conn, args.silver, args.gold)
+        run_queries(conn, args.respostas)
 
 
 if __name__ == "__main__":
