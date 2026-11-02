@@ -21,7 +21,7 @@ orquestração no Azure Data Factory, modelo de anomalia e deploy em container.
 | Modelo (Isolation Forest, sem rótulo) | **ROC-AUC 0,916 · PR-AUC 0,846** no teste |
 | Fila de auditoria (top 10% dos cartões) | **precisão 97%**, lift 3,9× sobre o acaso |
 | Features | **42** por cartão na gold (`card_features`); o modelo usa **36** delas (`mlops/model_config.yml`) — as 6 restantes são contagens/valores brutos usados só no BI |
-| Testes | **34 pytest** (gerador, ingestão, lotes/quarentena, silver + qualidade, features, modelo, API, contrato de orquestração) + 1 paridade pandas × PySpark (roda no container Spark) · **17 testes dbt** (incl. paridade SQL × Python) |
+| Testes | **35 pytest** (gerador, ingestão, lotes/quarentena, silver + qualidade, features, modelo, API, contrato de orquestração) + 1 paridade pandas × PySpark (roda no container Spark) · **17 testes dbt** (incl. paridade SQL × Python) |
 
 Cada alerta vem com o **motivo** (SHAP). Exemplo real da fila:
 
@@ -223,9 +223,10 @@ caminho do Windows (`C:/Program Files/Git/workspace/...`) e o Spark falha com
 
 Deploy no Azure (depois de `az login` e `databricks auth login`): [`mlops/infra/deploy.sh`](mlops/infra/deploy.sh).
 
-Para processar as gerações antigas de extratos (lotes 1 a 9, 13,8 mil cartões) e levar o resultado ao
-Power BI Desktop, siga o [**Manual dos lotes**](MANUAL_LOTES.md) e o
-[**guia do Power BI**](mlops/powerbi/README.md).
+Power BI: `python -m src.data_pipeline.export_bi` grava em `data/processed/powerbi` a gold do
+`viacard_v44` (2.500 cartões, fila de 250), que é o que o relatório *Fila de Auditoria* lê — passo a passo no
+[**guia do Power BI**](mlops/powerbi/README.md). As gerações antigas de extratos (lotes 1 a 9, 13,8 mil
+cartões) servem só de prova negativa e de comparação: veja o [**Manual dos lotes**](MANUAL_LOTES.md).
 
 ---
 
@@ -282,7 +283,7 @@ corrompido vira linha em `files.erro`, não derruba o lote.
   referência) com severidade: `erro` bloqueia, `alerta` registra ([`quality_report.json`](src/data_pipeline/quality.py)).
 
 **Gold** — `card_features` (1 linha por cartão, 42 features) e fatos para o Power BI
-(`fato_embarques_diario`, `fato_recargas_mensal`).
+(`fato_embarques_diario`, `fato_embarques_mensal` — o que o relatório consome —, `fato_recargas_mensal`).
 
 ---
 

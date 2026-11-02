@@ -188,10 +188,13 @@ Resultado observado: 13.028 cartões pontuados, **1.303 alertas** (top 10%), em 
 
 ---
 
-## 7. Levar para o Power BI
+## 7. Levar para o Power BI (comparação)
+
+O relatório *Fila de Auditoria* lê `data/processed/powerbi`, que é a exportação do `viacard_v44`. Para
+comparar com os lotes sem sobrescrevê-la, exporte para outra pasta e aponte as consultas do Power BI para ela:
 
 ```bash
-python -m src.data_pipeline.export_bi --gold data/processed/lotes/consolidado/gold --out data/processed/powerbi
+python -m src.data_pipeline.export_bi --gold data/processed/lotes/consolidado/gold --out data/processed/powerbi_lotes
 ```
 
 Saída medida (20 s, 38 MB no total):

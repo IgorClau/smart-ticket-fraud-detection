@@ -13,14 +13,16 @@ Este guia cobre a conexão local (arquivos gerados pelo pipeline) e a conexão n
 | Nuvem | Azure Databricks (SQL Warehouse) | depois do deploy: tabelas Delta `gold.*` |
 | Alternativa | PostgreSQL | quando o time já consome o Postgres do projeto |
 
-Para o caso local, gere a pasta de consumo (o fato diário fica grande; corte o período):
+Para o caso local, gere a pasta de consumo a partir da gold do `viacard_v44` (o padrão do comando):
 
 ```bash
-python -m src.data_pipeline.export_bi --gold data/processed/lotes/consolidado/gold --out data/processed/powerbi --desde 2023-01-01
+python -m src.data_pipeline.export_bi
 ```
 
-Saem em `data/processed/powerbi`: `card_scores`, `card_features`, `fato_embarques_mensal`,
-`fato_embarques_diario`, `fato_recargas_mensal` e `dim_linha`. Use `--formato csv` se precisar de CSV.
+Saem em `data/processed/powerbi`: `card_scores` (2.500), `card_features` (2.500), `fato_embarques_mensal`
+(212.037), `fato_embarques_diario` (3.581.729), `fato_recargas_mensal` (147.246) e `dim_linha` (226) — 11 MB.
+Use `--desde 2023-01-01` para cortar o período e `--formato csv` se precisar de CSV. Para comparar com os
+lotes 1–9, exporte-os para outra pasta (`--out data/processed/powerbi_lotes`, ver `MANUAL_LOTES.md`).
 
 ---
 
@@ -34,8 +36,8 @@ Repita para `card_scores`, `card_features`, `fato_recargas_mensal` e `dim_linha`
 `PastaRepositorio` (Página Inicial → Transformar dados → Editar parâmetros). Aponte-o para a raiz do
 repositório, terminando em `\`, e todas as tabelas passam a ler dali — mover a pasta não quebra o relatório.
 
-**Pasta particionada por lote** (se preferir ler direto de `consolidado/gold/fato_embarques_diario`,
-que tem um arquivo por lote): *Obter dados → Mais… → Arquivo → Pasta*, depois *Transformar dados →
+**Pasta particionada por lote** (só na comparação com os lotes 1–9; o relatório padrão usa os arquivos
+únicos do `viacard_v44`. Se quiser ler direto de `consolidado/gold/fato_embarques_diario`, que tem um arquivo por lote): *Obter dados → Mais… → Arquivo → Pasta*, depois *Transformar dados →
 Editor Avançado* e cole:
 
 ```m

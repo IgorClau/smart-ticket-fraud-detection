@@ -30,7 +30,7 @@ import pandas as pd
 from src import config
 from src.data_pipeline.ingest import ingest
 from src.data_pipeline.silver import transform as silver_transform
-from src.feature_engineering.build import build as gold_build
+from src.feature_engineering.build import build as gold_build, fato_embarques_mensal
 
 CONSOLIDADO = "consolidado"
 
@@ -103,14 +103,7 @@ def consolidar(out_root: Path, lotes: list[str]) -> dict:
         origem = out_root / l / "gold" / "fato_embarques_diario.parquet"
         if not origem.exists():
             continue
-        d = pd.read_parquet(origem)
-        d["ano_mes"] = pd.to_datetime(d["data"]).dt.strftime("%Y-%m")
-        mensais.append(d.groupby(["card_id", "ano_mes", "operador_display", "codigo_linha", "tipo_linha"],
-                                 dropna=False, observed=True)
-                       .agg(n_embarques=("n_embarques", "sum"), n_debitos=("n_debitos", "sum"),
-                            valor_debitado=("valor_debitado", "sum"), n_erros=("n_erros", "sum"),
-                            n_noite=("n_noite", "sum"), dias_com_uso=("data", "nunique"))
-                       .reset_index())
+        mensais.append(fato_embarques_mensal(pd.read_parquet(origem)))
     if mensais:
         mensal = pd.concat(mensais, ignore_index=True)
         mensal.to_parquet(destino / "gold" / "fato_embarques_mensal.parquet", index=False)

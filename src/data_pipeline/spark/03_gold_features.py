@@ -51,6 +51,15 @@ fato_path = table_path(lake_root, "gold", "fato_embarques_diario")
 write_delta(fato_emb, fato_path)
 optimize(spark, fato_path, ["card_id"])
 
+# fato leve cartão x mês x linha: é o que o modelo do Power BI consome (mesma regra do pandas)
+fato_mes = (spark.read.format("delta").load(fato_path)
+            .withColumn("ano_mes", F.date_format("data", "yyyy-MM"))
+            .groupBy("card_id", "ano_mes", "operador_display", "codigo_linha", "tipo_linha")
+            .agg(F.sum("n_embarques").alias("n_embarques"), F.sum("n_debitos").alias("n_debitos"),
+                 F.sum("valor_debitado").alias("valor_debitado"), F.sum("n_erros").alias("n_erros"),
+                 F.sum("n_noite").alias("n_noite"), F.countDistinct("data").alias("dias_com_uso")))
+write_delta(fato_mes, table_path(lake_root, "gold", "fato_embarques_mensal"))
+
 fato_rec = (tx.filter("is_recarga").groupBy("card_id", "ano_mes", "empresa_recarga")
             .agg(F.count("*").alias("n_recargas"), F.sum("vd").alias("valor_recarregado")))
 write_delta(fato_rec, table_path(lake_root, "gold", "fato_recargas_mensal"))
@@ -60,4 +69,5 @@ write_delta(spark.read.format("delta").load(table_path(lake_root, "silver", "dim
 features = spark.read.format("delta").load(table_path(lake_root, "gold", "card_features"))
 print("gold OK:", {"cartoes": features.count(), "features": len(features.columns) - 1})
 print("registradas:", register_layer(spark, catalog, lake_root, "gold",
-                                    ["card_features", "fato_embarques_diario", "fato_recargas_mensal", "dim_linha"]))
+                                    ["card_features", "fato_embarques_diario", "fato_embarques_mensal",
+                                     "fato_recargas_mensal", "dim_linha"]))

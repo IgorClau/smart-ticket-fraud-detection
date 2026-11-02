@@ -5,11 +5,13 @@ O Power BI Desktop lê Parquet nativamente (mais rápido e menor), mas às vezes
 preciso CSV — para abrir no Excel, mandar por e-mail ou usar um gateway antigo.
 Este módulo resolve os dois casos e junta as tabelas que ficam particionadas por lote.
 
-    python -m src.data_pipeline.export_bi --gold data/processed/lotes/consolidado/gold \
-        --out data/processed/powerbi --formato csv --desde 2023-01-01
+    python -m src.data_pipeline.export_bi                       # gold do viacard_v44 -> data/processed/powerbi
+    python -m src.data_pipeline.export_bi --formato csv --desde 2023-01-01
 
-Uso típico com os 9 lotes: exportar tudo em parquet, e o fato diário só do período
-que vai para o dashboard (o histórico completo tem dezenas de milhões de linhas).
+Comparação com os 9 lotes antigos (sem sobrescrever a pasta do dashboard):
+
+    python -m src.data_pipeline.export_bi --gold data/processed/lotes/consolidado/gold \
+        --out data/processed/powerbi_lotes
 """
 from __future__ import annotations
 

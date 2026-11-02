@@ -41,3 +41,17 @@ def test_detector_ranqueia_outlier_e_persiste(tmp_path):
 
     det.save(tmp_path / "m.joblib")
     np.testing.assert_allclose(FraudDetector.load(tmp_path / "m.joblib").score(normal), det.score(normal))
+
+
+def test_fato_mensal_preserva_os_totais_do_diario(passageiro_regular, passageiro_replay, dims):
+    # o Power BI lê o fato mensal: ele não pode perder nem duplicar embarque ou receita
+    from src.feature_engineering.build import build_bi_tables
+
+    bronze = pd.concat([passageiro_para_bronze(passageiro_regular, "A"),
+                        passageiro_para_bronze(passageiro_replay, "B")])
+    bi = build_bi_tables(transform_transactions(bronze, dims))
+    dia, mes = bi["fato_embarques_diario"], bi["fato_embarques_mensal"]
+    for col in ("n_embarques", "n_debitos", "n_erros", "n_noite"):
+        assert mes[col].sum() == dia[col].sum()
+    assert mes["valor_debitado"].sum() == pytest.approx(dia["valor_debitado"].sum())
+    assert not mes.duplicated(["card_id", "ano_mes", "operador_display", "codigo_linha", "tipo_linha"]).any()
