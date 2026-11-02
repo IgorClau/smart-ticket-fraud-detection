@@ -27,12 +27,13 @@ sys.path.insert(0, str(_find_root()))
 from pyspark.sql import functions as F  # noqa: E402
 from pyspark.sql import types as T  # noqa: E402
 
-from src.data_pipeline.spark.common import get_spark, table_path, widget, write_delta  # noqa: E402
+from src.data_pipeline.spark.common import get_spark, register_layer, table_path, widget, write_delta  # noqa: E402
 
 spark = get_spark()
 lake_root = widget("lake_root", str(_find_root() / "data" / "processed" / "lakehouse"))
 raw_path = widget("raw_path", str(_find_root() / "data" / "raw" / "viacard_v44"))
 batch_id = widget("batch_id", "local")
+catalog = widget("catalog", "")   # Unity Catalog (Azure): vazio = só caminho (local/Docker)
 print(lake_root, raw_path, batch_id)
 
 # COMMAND ----------
@@ -141,4 +142,6 @@ except Exception as exc:
 resumo = files_df.agg(F.count("*").alias("arquivos"), F.sum(F.col("erro").isNotNull().cast("int")).alias("com_erro"),
                       F.sum("n_tx").alias("transacoes")).first().asDict()
 print("bronze OK:", resumo)
+print("registradas:", register_layer(spark, catalog, lake_root, "bronze",
+                                    ["transactions", "admin_pendentes", "files", "labels", "labels_eventos"]))
 registros.unpersist()

@@ -1,0 +1,16 @@
+# Rode sempre de dentro da pasta dbt/:  dbt build --profiles-dir .
+smart_ticket:
+  target: local
+  outputs:
+    local:
+      type: duckdb
+      path: target/smart_ticket.duckdb
+      threads: 4
+    azure:
+      type: databricks
+      host: "{{ env_var('DATABRICKS_HOST') }}"            # adb-xxxx.azuredatabricks.net
+      http_path: "{{ env_var('DATABRICKS_HTTP_PATH') }}"  # /sql/1.0/warehouses/<id>
+      token: "{{ env_var('DATABRICKS_TOKEN') }}"
+      catalog: "{{ env_var('DATABRICKS_CATALOG', 'smart_ticket') }}"
+      schema: dbt
+      threads: 4

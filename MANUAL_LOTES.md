@@ -1,9 +1,10 @@
 # Manual — processar os lotes 1 a 9
 
-Como transformar as pastas `lote1` … `lote9` de `C:\Users\ADM\Desktop\Case Data Eng`
+Como transformar as pastas `lote1` … `lote9` de `04 - Case Data Eng Projeto\04.2 - Dados Brutos - Lotes`
 (13.817 extratos, 2,2 GB) em tabelas prontas para modelo e Power BI.
 
-Tudo é executado da raiz do repositório: `C:\Users\ADM\Desktop\Case Data Eng\smart-ticket-fraud-detection`.
+Tudo é executado da raiz do repositório: `04 - Case Data Eng Projeto\04.1 - Repositório\smart-ticket-fraud-detection`.
+Os lotes ficam dois níveis acima, em `../../04.2 - Dados Brutos - Lotes/` — os comandos abaixo usam esse caminho relativo.
 
 ---
 
@@ -60,7 +61,7 @@ Feche os `.xlsx` no Excel antes de rodar: o Windows trava o arquivo aberto e a l
 ## 3. Conferir o inventário
 
 ```bash
-python -c "import glob,os; [print(f'{os.path.basename(d):8} {len(glob.glob(d+chr(47)+chr(42)+\".xlsx\")):>6} extratos') for d in sorted(glob.glob(r'C:\Users\ADM\Desktop\Case Data Eng\lote*'))]"
+python -c "import glob,os; [print(f'{os.path.basename(d):8} {len(glob.glob(d+chr(47)+chr(42)+\".xlsx\")):>6} extratos') for d in sorted(glob.glob(r'../../04.2 - Dados Brutos - Lotes/lote*'))]"
 ```
 
 ---
@@ -68,7 +69,7 @@ python -c "import glob,os; [print(f'{os.path.basename(d):8} {len(glob.glob(d+chr
 ## 4. Processar tudo
 
 ```bash
-python -m src.data_pipeline.lotes --raw-dirs "C:/Users/ADM/Desktop/Case Data Eng/lote*" --out data/processed/lotes --workers 7 --continuar
+python -m src.data_pipeline.lotes --raw-dirs "../../04.2 - Dados Brutos - Lotes/lote*" --out data/processed/lotes --workers 7 --continuar
 ```
 
 O que acontece, lote a lote: **bronze** (lê os `.xlsx` em 7 processos), **silver** (tipagem, ordem

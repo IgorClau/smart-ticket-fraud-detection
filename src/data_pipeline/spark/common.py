@@ -92,3 +92,24 @@ def optimize(spark, path: str, zorder_by: list[str] | None = None) -> None:
 def register_table(spark, catalog_schema: str, table: str, path: str) -> None:
     if catalog_schema:
         spark.sql(f"CREATE TABLE IF NOT EXISTS {catalog_schema}.{table} USING DELTA LOCATION '{path}'")
+
+
+def register_layer(spark, catalog: str, lake_root: str, layer: str, tables: list[str]) -> list[str]:
+    """Registra as tabelas Delta da camada como <catalog>.<layer>.<tabela> (tabelas externas).
+
+    É o que torna a camada consultável por nome no Databricks SQL — o dbt (alvo `azure`) e o
+    Power BI leem `silver.*` e `gold.*`. Sem catálogo (local/Docker) não faz nada; tabelas
+    opcionais que não existem nesta execução (rótulos, quarentena) são puladas.
+    """
+    if not catalog:
+        return []
+    from delta.tables import DeltaTable
+
+    spark.sql(f"CREATE SCHEMA IF NOT EXISTS {catalog}.{layer}")
+    feitas = []
+    for t in tables:
+        path = table_path(lake_root, layer, t)
+        if DeltaTable.isDeltaTable(spark, path):
+            register_table(spark, f"{catalog}.{layer}", t, path)
+            feitas.append(t)
+    return feitas

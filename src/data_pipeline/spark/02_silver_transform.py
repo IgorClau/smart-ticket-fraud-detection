@@ -26,11 +26,12 @@ from pyspark.sql import functions as F  # noqa: E402
 
 from src.data_pipeline import quality  # noqa: E402
 from src.data_pipeline.reference import build_dimensions  # noqa: E402
-from src.data_pipeline.spark.common import get_spark, optimize, table_path, widget, write_delta  # noqa: E402
+from src.data_pipeline.spark.common import get_spark, optimize, register_layer, table_path, widget, write_delta  # noqa: E402
 
 spark = get_spark()
 lake_root = widget("lake_root", str(ROOT / "data" / "processed" / "lakehouse"))
 bases_dir = widget("bases_dir", str(ROOT / "data" / "synthetic" / "bases"))
+catalog = widget("catalog", "")   # Unity Catalog (Azure): vazio = só caminho (local/Docker)
 
 # COMMAND ----------
 
@@ -190,5 +191,9 @@ except Exception as exc:
     print(f"sem rótulos: {type(exc).__name__}")
 
 optimize(spark, silver_path, ["card_id"])
+registradas = register_layer(spark, catalog, lake_root, "silver",
+                             ["transactions", "cards", "recargas_pendentes", "labels_cartao", "labels_eventos",
+                              "quarentena_cartoes", *dims.keys()])
+print("registradas:", registradas)
 print("silver OK:", {"linhas_bronze": n_bronze, "linhas_silver": tx.count(), "cartoes": cards.count(),
                      "checks": f"{sum(c.ok for c in checks)}/{len(checks)}"})

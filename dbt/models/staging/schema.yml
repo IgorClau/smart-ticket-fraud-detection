@@ -1,0 +1,26 @@
+version: 2
+models:
+  - name: stg_embarques
+    columns:
+      - name: card_id
+        data_tests:
+          - not_null
+          - relationships: {arguments: {to: ref('stg_cartoes'), field: card_id}}
+      - name: event_ts
+        data_tests: [not_null]
+      - name: valor_debitado
+        data_tests: [nao_negativo]
+  - name: stg_cartoes
+    columns:
+      - name: card_id
+        data_tests: [unique, not_null]
+  - name: stg_scores
+    columns:
+      - name: card_id
+        data_tests:
+          - unique
+          - not_null
+          - relationships: {arguments: {to: ref('stg_cartoes'), field: card_id}}
+      - name: alerta
+        data_tests:
+          - accepted_values: {arguments: {values: [0, 1], quote: false}}

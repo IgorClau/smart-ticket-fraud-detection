@@ -6,7 +6,8 @@ Projeto de portfólio para **Engenharia de Dados**: pipeline medallion, qualidad
 orquestração no Azure Data Factory, modelo de anomalia e deploy em container.
 
 > **Stack:** Python · pandas · PySpark + Delta Lake (Databricks) · Azure Data Factory · ADLS Gen2 ·
-> PostgreSQL · scikit-learn + SHAP · FastAPI · Docker · Azure Container Apps · GitHub Actions · Power BI
+> PostgreSQL · dbt (DuckDB local / Databricks SQL) · scikit-learn + SHAP · FastAPI · Docker ·
+> Azure Container Apps · Bicep · GitHub Actions · Power BI
 
 ---
 
@@ -19,7 +20,8 @@ orquestração no Azure Data Factory, modelo de anomalia e deploy em container.
 | Qualidade | **20/20** checagens aprovadas na silver (erro = pipeline para) |
 | Modelo (Isolation Forest, sem rótulo) | **ROC-AUC 0,916 · PR-AUC 0,846** no teste |
 | Fila de auditoria (top 10% dos cartões) | **precisão 97%**, lift 3,9× sobre o acaso |
-| Testes | 22 testes (gerador, ingestão, silver + qualidade, features, modelo, API) + paridade pandas × PySpark |
+| Features | **42** por cartão na gold (`card_features`); o modelo usa **36** delas (`mlops/model_config.yml`) — as 6 restantes são contagens/valores brutos usados só no BI |
+| Testes | **34 pytest** (gerador, ingestão, lotes/quarentena, silver + qualidade, features, modelo, API, contrato de orquestração) + 1 paridade pandas × PySpark (roda no container Spark) · **17 testes dbt** (incl. paridade SQL × Python) |
 
 Cada alerta vem com o **motivo** (SHAP). Exemplo real da fila:
 
@@ -111,6 +113,7 @@ smart-ticket-fraud-detection/
 │   ├── training/             treino, benchmarks, relatórios e figuras
 │   ├── api/                  FastAPI
 │   └── pipeline.py           orquestrador local (lê mlops/pipeline.yml)
+├── dbt/                      staging → marts em SQL + 17 testes (DuckDB local / Databricks no Azure)
 ├── tests/
 ├── docker/
 │   ├── Dockerfile            imagem da API
@@ -125,9 +128,13 @@ smart-ticket-fraud-detection/
 │   └── reports/              metrics.md, recall por tipo, alertas explicados, figuras
 ├── .github/workflows/ci.yml
 ├── docker-compose.yml
-├── requirements.txt
+├── requirements.txt          projeto + API + testes (.venv)
+├── requirements-dbt.txt      dbt em ambiente separado (.venv-dbt): fixa outro pydantic
 └── README.md
 ```
+
+Fora do repositório, na pasta do Case: `04.2 - Dados Brutos - Lotes` (lotes 1–9), `04.3 - Bases de
+Referência`, `04.4 - Extrato Modelo e Prompts do Gerador`, `04.5 - Power BI` (`.pbix` + projeto PBIP).
 
 ---
 
@@ -150,6 +157,27 @@ python -m src.pipeline
 ```bash
 pytest -q
 ```
+
+dbt (ambiente próprio; o estágio `dbt_marts` do pipeline o encontra em `.venv-dbt`):
+
+```bash
+python -m venv .venv-dbt
+```
+
+```bash
+.venv-dbt/Scripts/pip install -r requirements-dbt.txt
+```
+
+```bash
+cd dbt && ../.venv-dbt/Scripts/python -m dbt.cli.main build --profiles-dir .
+```
+
+`python -m dbt.cli.main` faz o mesmo que `dbt` e continua funcionando se a pasta do projeto for movida
+ou renomeada — o lançador `dbt.exe` do venv guarda o caminho absoluto antigo e quebra.
+
+Spark local (Windows): use o container (`docker compose --profile spark …`). O Spark nativo no Windows
+exige `winutils.exe`/`hadoop.dll`, que a Apache não distribui, e o `.cmd` de inicialização falha em
+caminhos com parênteses.
 
 API (imagem com modelo e scores embutidos):
 
@@ -180,6 +208,18 @@ docker compose --profile spark run --rm -e RAW_PATH=/workspace/data/raw/amostra_
 ```bash
 docker compose --profile spark run --rm spark pytest -q tests/test_spark_parity.py
 ```
+
+O comando padrão roda os notebooks 01–03. Para incluir o `04_train_score` e o registro no catálogo,
+instale no container as bibliotecas que o ADF instala na atividade `TreinoScore` (validado em 02/11/2026
+na amostra: 40 arquivos, 122.961 transações, silver 15/15, 42 features, 4 alertas):
+
+```bash
+docker compose --profile spark run --rm -e RAW_PATH=/workspace/data/raw/amostra_40 -e LAKE_ROOT=/workspace/data/processed/lakehouse_amostra -e CATALOG=spark_catalog spark bash -lc 'pip install -q scikit-learn==1.9.1 shap==0.52.0 tabulate==0.10.0 matplotlib joblib && for nb in 01_bronze_ingest 02_silver_transform 03_gold_features 04_train_score; do python src/data_pipeline/spark/$nb.py || exit 1; done'
+```
+
+No **Git Bash**, rode antes `export MSYS_NO_PATHCONV=1`: sem isso o Git Bash converte `/workspace/...` em um
+caminho do Windows (`C:/Program Files/Git/workspace/...`) e o Spark falha com
+`No FileSystem for scheme "C"`. No PowerShell não é preciso.
 
 Deploy no Azure (depois de `az login` e `databricks auth login`): [`mlops/infra/deploy.sh`](mlops/infra/deploy.sh).
 
@@ -320,10 +360,12 @@ Documentação interativa em `localhost:8000/docs`.
   → Gold → TreinoScore em job cluster efêmero, atividade `Fail` com código `DQ_SILVER` quando a qualidade
   bloqueia, trigger diário às 02:00.
 - **Databricks** ([`src/data_pipeline/spark`](src/data_pipeline/spark)): notebooks em formato fonte
-  (versionáveis), Delta por caminho (com ou sem Unity Catalog), `OPTIMIZE ZORDER BY card_id`. Validados
+  (versionáveis), Delta por caminho registrado como tabela externa no Unity Catalog (`smart_ticket.<camada>.<tabela>`, widget `catalog`), `OPTIMIZE ZORDER BY card_id`. Validados
   localmente em Spark 4 + Delta 4 no container `docker/Dockerfile.spark`.
 - **Infra** ([`mlops/infra/main.bicep`](mlops/infra/main.bicep)): ADLS Gen2 sem chave compartilhada,
   ADF e Databricks com identidade gerenciada + RBAC, ACR, Container Apps escalando a zero.
+  O `deploy.sh` (7 passos) também prepara o Unity Catalog: credencial do access connector, locais externos,
+  catálogo/schemas, permissões da MSI do ADF e a política de cluster `stf-uc-jobs`.
 - **CI** ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)): testes → build + smoke test da imagem →
   deploy no ACR/Container Apps via OIDC (liga com a variável `AZURE_DEPLOY=true`).
 - **Power BI** ([`mlops/powerbi`](mlops/powerbi)): esquema estrela sobre a gold e medidas DAX (operação,
@@ -340,8 +382,8 @@ Documentação interativa em `localhost:8000/docs`.
 | Fund. — Cloud | 🟡 código pronto (Bicep, ADF, notebooks); falta executar na conta Azure |
 | Fund. — Git | ✅ repositório com commits por etapa (falta publicar no GitHub) |
 | Sprint 1 — MVP | ✅ reprodutível do gerador ao score |
-| Sprint 2 — Pipeline | ✅ medallion local + Databricks/ADF · ⬜ dbt (próximo passo, sobre Databricks SQL) |
-| Sprint 3 — Qualidade/prova | ✅ checagens bloqueantes, pytest, métricas com rótulo, SHAP, clusters · 🟡 `.pbix` a montar sobre o modelo documentado |
+| Sprint 2 — Pipeline | ✅ medallion local + Databricks/ADF · ✅ dbt (11 modelos, 17 testes, paridade com a gold; alvo `azure` = Databricks SQL) |
+| Sprint 3 — Qualidade/prova | ✅ checagens bloqueantes, pytest, métricas com rótulo, SHAP, clusters · ✅ `Fila de Auditoria.pbix` + projeto PBIP (4 páginas, 24 medidas) · 🟡 publicar no Power BI Service |
 | Sprint 4 — Deploy | ✅ API em Docker, CI, IaC · 🟡 publicação no Container Apps pendente de login |
 
 ---

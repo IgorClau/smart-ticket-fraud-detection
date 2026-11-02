@@ -156,7 +156,7 @@ def main() -> None:
         for d in dirs:
             linhas.append(processar_lote(d, args.out, args.workers, args.continuar))
 
-    resumo = consolidar(args.out, [d.name for d in dirs])
+    consolidar(args.out, [d.name for d in dirs])
     if linhas:
         df = pd.DataFrame(linhas)
         df.to_csv(args.out / CONSOLIDADO / "resumo_lotes.csv", index=False)

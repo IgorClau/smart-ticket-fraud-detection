@@ -24,11 +24,12 @@ def _find_root():
 ROOT = _find_root()
 sys.path.insert(0, str(ROOT))
 
-from src.data_pipeline.spark.common import _dbutils, get_spark, is_databricks, table_path, widget, write_delta  # noqa: E402
+from src.data_pipeline.spark.common import _dbutils, get_spark, is_databricks, register_layer, table_path, widget, write_delta  # noqa: E402
 from src.training.train import train  # noqa: E402
 
 spark = get_spark()
 lake_root = widget("lake_root", str(ROOT / "data" / "processed" / "lakehouse"))
+catalog = widget("catalog", "")   # Unity Catalog (Azure): vazio = só caminho (local/Docker)
 
 # COMMAND ----------
 
@@ -55,6 +56,7 @@ import pandas as pd  # noqa: E402
 
 scores = pd.read_parquet(gold_local / "card_scores.parquet")
 write_delta(spark.createDataFrame(scores), table_path(lake_root, "gold", "card_scores"))
+register_layer(spark, catalog, lake_root, "gold", ["card_scores"])
 
 # artefatos e relatórios versionados por execução no lake
 destino = table_path(lake_root, "ml", f"run={metrics.get('segundos', 0)}_{Path(tmp).name}")

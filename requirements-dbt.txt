@@ -1,0 +1,5 @@
+# dbt (Sprint 2) — instale num ambiente SEPARADO (.venv-dbt): o dbt fixa uma versão de pydantic
+# diferente da usada pela API (requirements.txt). Mesmo projeto em DuckDB (local) e Azure Databricks.
+dbt-core==1.12.6
+dbt-duckdb==1.11.1
+dbt-databricks==1.13.0

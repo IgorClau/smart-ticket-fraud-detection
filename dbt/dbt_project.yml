@@ -1,0 +1,27 @@
+# Projeto dbt do Smart Ticket Fraud Detection (Sprint 2 — camada gold em SQL).
+# O mesmo código roda em dois alvos (profiles.yml):
+#   local  -> DuckDB lendo os Parquet da silver/gold gerados por `python -m src.pipeline`
+#   azure  -> Azure Databricks (SQL Warehouse) lendo as tabelas Delta silver.* / gold.*
+name: smart_ticket
+version: "1.0.0"
+config-version: 2
+profile: smart_ticket
+
+model-paths: ["models"]
+test-paths: ["tests"]
+macro-paths: ["macros"]
+target-path: target
+clean-targets: [target, dbt_packages]
+
+vars:
+  # Raiz dos Parquet no alvo local (relativa à pasta dbt/).
+  data_root: "../data/processed"
+
+models:
+  smart_ticket:
+    staging:
+      +materialized: view
+      +schema: staging
+    marts:
+      +materialized: table
+      +schema: marts

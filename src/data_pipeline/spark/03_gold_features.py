@@ -23,11 +23,12 @@ sys.path.insert(0, str(ROOT))
 
 from pyspark.sql import functions as F  # noqa: E402
 
-from src.data_pipeline.spark.common import get_spark, optimize, table_path, widget, write_delta  # noqa: E402
+from src.data_pipeline.spark.common import get_spark, optimize, register_layer, table_path, widget, write_delta  # noqa: E402
 from src.data_pipeline.spark.features_spark import build_card_features  # noqa: E402
 
 spark = get_spark()
 lake_root = widget("lake_root", str(ROOT / "data" / "processed" / "lakehouse"))
+catalog = widget("catalog", "")   # Unity Catalog (Azure): vazio = só caminho (local/Docker)
 
 # COMMAND ----------
 
@@ -58,3 +59,5 @@ write_delta(spark.read.format("delta").load(table_path(lake_root, "silver", "dim
 
 features = spark.read.format("delta").load(table_path(lake_root, "gold", "card_features"))
 print("gold OK:", {"cartoes": features.count(), "features": len(features.columns) - 1})
+print("registradas:", register_layer(spark, catalog, lake_root, "gold",
+                                    ["card_features", "fato_embarques_diario", "fato_recargas_mensal", "dim_linha"]))

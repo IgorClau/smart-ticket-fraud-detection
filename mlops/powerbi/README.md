@@ -30,13 +30,17 @@ Saem em `data/processed/powerbi`: `card_scores`, `card_features`, `fato_embarque
 Conectar* e aponte, por exemplo, `data\processed\powerbi\fato_embarques_mensal.parquet`.
 Repita para `card_scores`, `card_features`, `fato_recargas_mensal` e `dim_linha`.
 
+**Parâmetro de caminho.** O modelo PBIP (`04.5.2 - Projeto PBIP`) usa o parâmetro Power Query
+`PastaRepositorio` (Página Inicial → Transformar dados → Editar parâmetros). Aponte-o para a raiz do
+repositório, terminando em `\`, e todas as tabelas passam a ler dali — mover a pasta não quebra o relatório.
+
 **Pasta particionada por lote** (se preferir ler direto de `consolidado/gold/fato_embarques_diario`,
 que tem um arquivo por lote): *Obter dados → Mais… → Arquivo → Pasta*, depois *Transformar dados →
 Editor Avançado* e cole:
 
 ```m
 let
-    Origem     = Folder.Files("C:\Users\ADM\Desktop\Case Data Eng\smart-ticket-fraud-detection\data\processed\lotes\consolidado\gold\fato_embarques_diario"),
+    Origem     = Folder.Files(PastaRepositorio & "data\processed\lotes\consolidado\gold\fato_embarques_diario"),
     SoParquet  = Table.SelectRows(Origem, each Text.EndsWith([Name], ".parquet")),
     Lidos      = Table.AddColumn(SoParquet, "Dados", each Parquet.Document([Content])),
     Somente    = Table.SelectColumns(Lidos, {"Dados"}),
@@ -161,7 +165,17 @@ fila de auditoria (Cartões em Alerta, % em Alerta, Receita em Alerta) e, onde h
 qualidade do modelo (Precisão e Recall da Fila).
 
 Se você conectou o fato mensal, troque `fato_embarques_diario` por `fato_embarques_mensal`
-nas medidas de soma — os nomes das colunas são os mesmos.
+nas medidas de soma — os nomes das colunas são os mesmos. Ou use direto
+[`medidas_mensal.dax`](medidas_mensal.dax): é a versão sobre o fato mensal, com as 24 medidas do relatório
+pronto (`Fila de Auditoria.pbix`, na pasta `04.5 - Power BI` do Case).
+
+**Páginas por código (opcional).** [`gerar_relatorio_pbir.py`](gerar_relatorio_pbir.py) escreve as quatro
+páginas (Operação, Fila de auditoria, Perfis, Qualidade do modelo) no formato PBIR, dentro da pasta
+`.Report` de um projeto PBIP — é assim que o `04.5.2 - Projeto PBIP (código-fonte)` foi montado:
+
+```bash
+python mlops/powerbi/gerar_relatorio_pbir.py "<pasta>/Fila de Auditoria.Report" "<tema>/Fluent2-CY26SU08.json"
+```
 
 ---
 
@@ -194,4 +208,5 @@ Como os caminhos não mudam, a atualização não pede nenhuma reconfiguração.
 - Prefira **Parquet a CSV**: menor, tipado e muito mais rápido para carregar.
 - Nada de colunas calculadas pesadas no Power BI: se precisar de um campo novo em milhões de linhas,
   calcule na gold (`src/feature_engineering/build.py`) e reexporte.
-- O `.pbix` não é versionado (binário); este guia e `medidas.dax` são a fonte da verdade do modelo.
+- O `.pbix` não é versionado (binário); fica em `04.5 - Power BI` do Case, junto do projeto PBIP (texto).
+  Este guia, `medidas.dax` e `medidas_mensal.dax` são a fonte da verdade do modelo.

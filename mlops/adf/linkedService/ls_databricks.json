@@ -1,7 +1,7 @@
 {
   "name": "ls_databricks",
   "properties": {
-    "description": "Workspace Databricks. MSI do ADF (Contributor no workspace) e job cluster efêmero por execução.",
+    "description": "Workspace Databricks. MSI do ADF (Contributor no workspace) e job cluster efêmero por execução, criado pela política stf-uc-jobs (acesso compatível com Unity Catalog).",
     "type": "AzureDatabricks",
     "typeProperties": {
       "domain": "https://adb-0000000000000000.0.azuredatabricks.net",
@@ -10,6 +10,7 @@
       "newClusterVersion": "16.4.x-scala2.12",
       "newClusterNumOfWorker": "1:4",
       "newClusterNodeType": "Standard_D4ds_v5",
+      "policyId": "<cluster-policy-id>",
       "newClusterSparkConf": {
         "spark.sql.shuffle.partitions": "64",
         "spark.databricks.delta.optimizeWrite.enabled": "true"

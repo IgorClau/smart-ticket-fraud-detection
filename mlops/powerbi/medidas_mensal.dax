@@ -1,0 +1,87 @@
+// Medidas do modelo "Fila de Auditoria" (Power BI) — versão sobre o FATO MENSAL.
+// Tabelas: fato_embarques_mensal, fato_recargas_mensal, card_scores (dimensão cartão),
+//          card_features, dim_linha, dim_calendario. Medidas ficam na tabela _Medidas.
+// Relacionamentos (1:N, filtro único):
+//   card_scores[card_id]    -> fato_embarques_mensal / fato_recargas_mensal / card_features
+//   dim_calendario[Date]    -> fato_embarques_mensal[Data] / fato_recargas_mensal[Data]  (1º dia do mês)
+//   dim_linha[linha_key]    -> fato_embarques_mensal[linha_key]
+// Diferença para medidas.dax (diário): a média móvel de 7 dias vira média móvel de 3 meses.
+// Colunas calculadas em card_scores:
+//   decil_score   = MAX ( 1, ROUNDUP ( card_scores[percentil] * 10, 0 ) )
+//   status_alerta = IF ( card_scores[alerta] = 1, "Em alerta", "Normal" )
+// Relatório (PBIR): gerar_relatorio_pbir.py gera as 4 páginas em Power BI\Fila de Auditoria.Report
+
+// ---- Operação -----------------------------------------------------------------
+Embarques = SUM ( fato_embarques_mensal[n_embarques] )
+
+Embarques Pagos = SUM ( fato_embarques_mensal[n_debitos] )
+
+Receita = SUM ( fato_embarques_mensal[valor_debitado] )
+
+Ticket Médio = DIVIDE ( [Receita], [Embarques Pagos] )
+
+Cartões Ativos = DISTINCTCOUNT ( fato_embarques_mensal[card_id] )
+
+Embarques por Cartão Ativo = DIVIDE ( [Embarques], [Cartões Ativos] )
+
+% Embarques Noturnos = DIVIDE ( SUM ( fato_embarques_mensal[n_noite] ), [Embarques] )
+
+% Erros de Validador = DIVIDE ( SUM ( fato_embarques_mensal[n_erros] ), [Embarques] )
+
+// ---- Tendência ----------------------------------------------------------------
+Embarques MoM % =
+VAR atual = [Embarques]
+VAR anterior = CALCULATE ( [Embarques], DATEADD ( dim_calendario[Date], -1, MONTH ) )
+RETURN DIVIDE ( atual - anterior, anterior )
+
+Receita MoM % =
+VAR atual = [Receita]
+VAR anterior = CALCULATE ( [Receita], DATEADD ( dim_calendario[Date], -1, MONTH ) )
+RETURN DIVIDE ( atual - anterior, anterior )
+
+// o fato mensal não tem grão diário: média dos últimos 3 meses com dado
+Embarques Média Móvel 3M =
+VAR periodo = DATESINPERIOD ( dim_calendario[Date], MAX ( dim_calendario[Date] ), -3, MONTH )
+RETURN CALCULATE ( AVERAGEX ( VALUES ( dim_calendario[AnoMes] ), [Embarques] ), periodo )
+
+// ---- Recargas -----------------------------------------------------------------
+Recarregado = SUM ( fato_recargas_mensal[valor_recarregado] )
+
+Recargas = SUM ( fato_recargas_mensal[n_recargas] )
+
+// ---- Fila de auditoria --------------------------------------------------------
+// sobre card_scores: não é filtrada por data/linha (o score é do cartão)
+Cartões em Alerta = CALCULATE ( DISTINCTCOUNT ( card_scores[card_id] ), card_scores[alerta] = 1 )
+
+% Cartões em Alerta = DIVIDE ( [Cartões em Alerta], DISTINCTCOUNT ( card_scores[card_id] ) )
+
+// cartões em alerta com embarque no contexto (período, linha, operadora)
+Cartões Ativos em Alerta = CALCULATE ( [Cartões Ativos], card_scores[alerta] = 1 )
+
+Receita em Cartões em Alerta = CALCULATE ( [Receita], card_scores[alerta] = 1 )
+
+Score Médio = AVERAGE ( card_scores[anomaly_score] )
+
+// ---- Qualidade do modelo (só onde há rótulo is_fraude) -------------------------
+Fraudes Reais = CALCULATE ( DISTINCTCOUNT ( card_scores[card_id] ), card_scores[is_fraude] = 1 )
+
+Cartões = COUNTROWS ( card_scores )
+
+Cartões Rotulados = CALCULATE ( COUNTROWS ( card_scores ), NOT ISBLANK ( card_scores[is_fraude] ) )
+
+// taxa base de fraude no contexto (ex.: por decil de score)
+Taxa de Fraude = DIVIDE ( [Fraudes Reais], [Cartões Rotulados] )
+
+// só cartões com rótulo no denominador: alertas sem rótulo (dados reais) não contam como erro
+Precisão da Fila =
+VAR alertaRotulado =
+    CALCULATE ( DISTINCTCOUNT ( card_scores[card_id] ), card_scores[alerta] = 1, NOT ISBLANK ( card_scores[is_fraude] ) )
+VAR alertaFraude =
+    CALCULATE ( DISTINCTCOUNT ( card_scores[card_id] ), card_scores[alerta] = 1, card_scores[is_fraude] = 1 )
+RETURN DIVIDE ( alertaFraude, alertaRotulado )
+
+Recall da Fila =
+DIVIDE (
+    CALCULATE ( DISTINCTCOUNT ( card_scores[card_id] ), card_scores[alerta] = 1, card_scores[is_fraude] = 1 ),
+    [Fraudes Reais]
+)

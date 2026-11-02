@@ -2,7 +2,7 @@
 #
 # O mesmo arquivo descreve o fluxo nos dois ambientes:
 #   - local:  `python -m src.pipeline` executa os estágios em sequência (pandas);
-#   - Azure:  cada estágio vira uma atividade do ADF (mlops/adf/pipeline_medallion.json)
+#   - Azure:  cada estágio vira uma atividade do ADF (mlops/adf/pipeline/pl_medallion_smart_ticket.json)
 #             que chama o notebook Databricks correspondente (src/data_pipeline/spark/).
 #
 # Caminhos relativos são resolvidos a partir da raiz do repositório.
@@ -38,4 +38,8 @@ stages:
   - name: train_evaluate
     description: Isolation Forest, métricas com ground truth, SHAP e clusters de perfil
     local: src.training.train
-    databricks_notebook: null         # roda no job de ML (mesmo código Python, cluster single-node)
+    databricks_notebook: src/data_pipeline/spark/04_train_score.py   # chama o mesmo src.training.train
+  - name: dbt_marts
+    description: marts SQL (fatos do BI, fila de auditoria, perguntas de negócio) + testes dbt, com paridade com a gold
+    local: src.data_pipeline.dbt_run
+    databricks_notebook: null         # Azure: dbt build --target azure (SQL Warehouse) numa tarefa dbt do Databricks Job

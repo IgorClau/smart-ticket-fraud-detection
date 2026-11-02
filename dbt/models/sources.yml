@@ -1,0 +1,28 @@
+version: 2
+
+# No DuckDB, `external_location` aponta para o Parquet; no Databricks é ignorado e a fonte
+# vira a tabela Delta <schema>.<tabela> escrita pelos notebooks 02_silver / 04_train_score.
+sources:
+  - name: silver
+    schema: silver
+    tables:
+      - name: transactions
+        config:
+          external_location: "read_parquet('{{ var('data_root') }}/silver/transactions.parquet')"
+      - name: cards
+        config:
+          external_location: "read_parquet('{{ var('data_root') }}/silver/cards.parquet')"
+      - name: dim_linha
+        config:
+          external_location: "read_parquet('{{ var('data_root') }}/silver/dim_linha.parquet')"
+  - name: gold
+    schema: gold
+    tables:
+      - name: card_scores
+        description: Saída do modelo (Isolation Forest + SHAP + clusters) — produzida em Python.
+        config:
+          external_location: "read_parquet('{{ var('data_root') }}/gold/card_scores.parquet')"
+      - name: fato_embarques_diario
+        description: Fato do pipeline Python; usado só no teste de paridade com o dbt.
+        config:
+          external_location: "read_parquet('{{ var('data_root') }}/gold/fato_embarques_diario.parquet')"

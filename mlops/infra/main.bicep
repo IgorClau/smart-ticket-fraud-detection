@@ -15,6 +15,9 @@ param location string = resourceGroup().location
 @description('Imagem da API. No primeiro deploy use a imagem pública de exemplo; o CI troca pela do ACR.')
 param apiImage string = 'mcr.microsoft.com/k8se/quickstart:latest'
 
+@description('Object ID de quem opera o projeto (az ad signed-in-user show --query id). Recebe acesso de dados ao lake para a carga inicial; vazio = nenhum.')
+param operatorPrincipalId string = ''
+
 var suffix = uniqueString(resourceGroup().id)
 var storageName = toLower('${prefix}lake${take(suffix, 8)}')
 var roles = {
@@ -47,6 +50,17 @@ resource containers 'Microsoft.Storage/storageAccounts/blobServices/containers@2
   parent: blob
   name: c
 }]
+
+// Sem chave compartilhada, nem o dono da assinatura grava no lake: acesso a dados exige RBAC de dados.
+resource operatorLake 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (!empty(operatorPrincipalId)) {
+  name: guid(storage.id, operatorPrincipalId, roles.storageBlobDataContributor)
+  scope: storage
+  properties: {
+    principalId: operatorPrincipalId
+    principalType: 'User'
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', roles.storageBlobDataContributor)
+  }
+}
 
 // ---------------------------------------------------------------- Data Factory
 resource adf 'Microsoft.DataFactory/factories@2018-06-01' = {
@@ -197,5 +211,8 @@ output storageAccount string = storage.name
 output lakeRoot string = 'abfss://lakehouse@${storage.name}.dfs.core.windows.net'
 output dataFactory string = adf.name
 output databricksUrl string = 'https://${dbw.properties.workspaceUrl}'
+output databricksWorkspace string = dbw.name
+output accessConnectorId string = dbwConnector.id
+output dataFactoryPrincipalId string = adf.identity.principalId
 output acrLoginServer string = acr.properties.loginServer
 output apiUrl string = 'https://${api.properties.configuration.ingress.fqdn}'

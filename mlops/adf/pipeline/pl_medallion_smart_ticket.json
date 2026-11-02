@@ -6,7 +6,8 @@
       "lake_root": { "type": "string", "defaultValue": "abfss://lakehouse@stfdatalake.dfs.core.windows.net" },
       "raw_root": { "type": "string", "defaultValue": "abfss://raw@stfdatalake.dfs.core.windows.net/extratos" },
       "bases_dir": { "type": "string", "defaultValue": "/Workspace/Repos/smart-ticket-fraud-detection/data/synthetic/bases" },
-      "repo_path": { "type": "string", "defaultValue": "/Repos/smart-ticket-fraud-detection" }
+      "repo_path": { "type": "string", "defaultValue": "/Repos/smart-ticket-fraud-detection" },
+      "catalog": { "type": "string", "defaultValue": "smart_ticket" }
     },
     "variables": {
       "ingest_date": { "type": "String" }
@@ -57,6 +58,7 @@
           "notebookPath": { "value": "@concat(pipeline().parameters.repo_path, '/src/data_pipeline/spark/01_bronze_ingest')", "type": "Expression" },
           "baseParameters": {
             "lake_root": { "value": "@pipeline().parameters.lake_root", "type": "Expression" },
+            "catalog": { "value": "@pipeline().parameters.catalog", "type": "Expression" },
             "raw_path": { "value": "@concat(pipeline().parameters.raw_root, '/ingest_date=', variables('ingest_date'))", "type": "Expression" },
             "batch_id": { "value": "@pipeline().RunId", "type": "Expression" }
           },
@@ -76,6 +78,7 @@
           "notebookPath": { "value": "@concat(pipeline().parameters.repo_path, '/src/data_pipeline/spark/02_silver_transform')", "type": "Expression" },
           "baseParameters": {
             "lake_root": { "value": "@pipeline().parameters.lake_root", "type": "Expression" },
+            "catalog": { "value": "@pipeline().parameters.catalog", "type": "Expression" },
             "bases_dir": { "value": "@pipeline().parameters.bases_dir", "type": "Expression" }
           },
           "libraries": [ { "pypi": { "package": "openpyxl==3.1.5" } }, { "pypi": { "package": "PyYAML==6.0.3" } } ]
@@ -90,7 +93,8 @@
         "typeProperties": {
           "notebookPath": { "value": "@concat(pipeline().parameters.repo_path, '/src/data_pipeline/spark/03_gold_features')", "type": "Expression" },
           "baseParameters": {
-            "lake_root": { "value": "@pipeline().parameters.lake_root", "type": "Expression" }
+            "lake_root": { "value": "@pipeline().parameters.lake_root", "type": "Expression" },
+            "catalog": { "value": "@pipeline().parameters.catalog", "type": "Expression" }
           },
           "libraries": [ { "pypi": { "package": "PyYAML==6.0.3" } } ]
         }
@@ -104,7 +108,8 @@
         "typeProperties": {
           "notebookPath": { "value": "@concat(pipeline().parameters.repo_path, '/src/data_pipeline/spark/04_train_score')", "type": "Expression" },
           "baseParameters": {
-            "lake_root": { "value": "@pipeline().parameters.lake_root", "type": "Expression" }
+            "lake_root": { "value": "@pipeline().parameters.lake_root", "type": "Expression" },
+            "catalog": { "value": "@pipeline().parameters.catalog", "type": "Expression" }
           },
           "libraries": [
             { "pypi": { "package": "scikit-learn==1.9.1" } },

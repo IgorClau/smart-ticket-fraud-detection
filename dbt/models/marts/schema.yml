@@ -1,0 +1,18 @@
+version: 2
+models:
+  - name: fct_embarques_diario
+    description: Cartão x dia x linha — base das medidas de operação no Power BI.
+    columns:
+      - name: n_embarques
+        data_tests: [not_null]
+  - name: mart_fila_auditoria
+    description: Top 10% dos cartões por score; cada linha traz o motivo (SHAP).
+    columns:
+      - name: card_id
+        data_tests: [unique, not_null]
+  - name: mart_qualidade_por_decil
+    columns:
+      - name: decil
+        data_tests:
+          - unique
+          - accepted_values: {arguments: {values: [1,2,3,4,5,6,7,8,9,10], quote: false}}

@@ -23,3 +23,16 @@ data/processed/gold/*
 # artefatos e relatórios das execuções sobre os lotes antigos (derivados)
 mlops/artifacts_lotes/
 mlops/reports_lotes/
+
+# dbt
+dbt/target/
+dbt/logs/
+dbt/dbt_packages/
+dbt/.user.yml
+.venv-dbt/
+.venv-spark/
+
+# Spark local (Docker/PySpark): warehouse, metastore e logs gerados em execução
+spark-warehouse/
+metastore_db/
+derby.log

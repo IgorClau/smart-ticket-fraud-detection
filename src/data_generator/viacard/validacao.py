@@ -6,7 +6,6 @@ eventos já materializados e confere as invariantes.
 from __future__ import annotations
 
 from collections import Counter
-from datetime import timedelta
 
 from . import config
 
@@ -73,8 +72,7 @@ def validar(passageiro, bases) -> dict:
         # formato: DISPLAY... NUM CODIGO DIR  -> nº é o penúltimo-antes-do-código
         try:
             # descrição = "<DISPLAY> <num> <codigo> <dir>"; display pode ter 2 palavras
-            dir_ = parts[-1]
-            codigo = parts[-2]
+            # parts[-3] existe => sentido e código também; faltar campo -> IndexError -> inválido
             num = int(parts[-3])
             display = " ".join(parts[:-3])
         except (ValueError, IndexError):
