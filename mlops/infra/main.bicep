@@ -1,8 +1,8 @@
 // Infraestrutura do Smart Ticket Fraud Detection (Azure).
 //   az deployment group create -g rg-smart-ticket-fraud -f mlops/infra/main.bicep -p prefix=stf
 //
-// Recursos: ADLS Gen2 (landing/raw/lakehouse) · Data Factory (MSI) · Databricks (premium) + access
-// connector · Container Registry · Log Analytics · Container Apps (API, escala a zero).
+// Recursos: ADLS Gen2 (landing/raw/lakehouse) · Data Factory (MSI) · Databricks (premium ou trial) + access
+// connector · Container Registry · Log Analytics · Container Apps (API, escala a zero) · identidade do CI.
 // Todo acesso entre serviços é por identidade gerenciada + RBAC — nenhuma chave em configuração.
 
 @description('Prefixo curto (3-8 letras minúsculas) usado nos nomes.')
@@ -18,12 +18,21 @@ param apiImage string = 'mcr.microsoft.com/k8se/quickstart:latest'
 @description('Object ID de quem opera o projeto (az ad signed-in-user show --query id). Recebe acesso de dados ao lake para a carga inicial; vazio = nenhum.')
 param operatorPrincipalId string = ''
 
+@description('Plano do Databricks. trial = Premium com DBU gratuito por 14 dias (depois, redeploy com premium converte o mesmo workspace).')
+@allowed(['premium', 'trial'])
+param databricksSku string = 'premium'
+
+@description('Repositório do GitHub (dono/nome) cujo job deploy, no ambiente production, entra no Azure por OIDC. Vazio = sem identidade de CI.')
+param githubRepo string = ''
+
 var suffix = uniqueString(resourceGroup().id)
 var storageName = toLower('${prefix}lake${take(suffix, 8)}')
 var roles = {
   storageBlobDataContributor: 'ba92f5b4-2d11-453d-a403-e96b0029c9fe'
   contributor: 'b24988ac-6180-42a0-ab88-20f7382dd24c'
   acrPull: '7f951dda-4ed3-4680-a7ca-43fe172d538d'
+  acrPush: '8311e382-0749-4cb8-b61a-304f252e45ec'
+  reader: 'acdd72a7-3385-48ef-bd42-f606fba81ae7'
 }
 
 // ---------------------------------------------------------------- data lake
@@ -83,7 +92,7 @@ resource adfLake 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
 resource dbw 'Microsoft.Databricks/workspaces@2024-05-01' = {
   name: '${prefix}-dbw-${take(suffix, 6)}'
   location: location
-  sku: { name: 'premium' }
+  sku: { name: databricksSku }
   properties: {
     managedResourceGroupId: subscriptionResourceId('Microsoft.Resources/resourceGroups', '${resourceGroup().name}-dbw-managed')
   }
@@ -207,6 +216,54 @@ resource api 'Microsoft.App/containerApps@2024-03-01' = {
   }
 }
 
+// ---------------------------------------------------------------- CI (GitHub Actions)
+// Identidade gerenciada com credencial federada: o mesmo login OIDC de uma app registration, mas criada
+// como recurso da assinatura (tenants de universidade costumam bloquear app registration para alunos).
+resource ciIdentity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-01-31' = if (!empty(githubRepo)) {
+  name: '${prefix}-ci-identity'
+  location: location
+}
+
+resource ciFederated 'Microsoft.ManagedIdentity/userAssignedIdentities/federatedIdentityCredentials@2023-01-31' = if (!empty(githubRepo)) {
+  parent: ciIdentity
+  name: 'github-production'
+  properties: {
+    issuer: 'https://token.actions.githubusercontent.com'
+    subject: 'repo:${githubRepo}:environment:production'
+    audiences: ['api://AzureADTokenExchange']
+  }
+}
+
+// O job deploy faz docker push no ACR e troca a imagem do Container Apps; Reader para enxergar o grupo.
+resource ciReader 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (!empty(githubRepo)) {
+  name: guid(resourceGroup().id, '${prefix}-ci-identity', roles.reader)
+  properties: {
+    principalId: ciIdentity!.properties.principalId
+    principalType: 'ServicePrincipal'
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', roles.reader)
+  }
+}
+
+resource ciAcrPush 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (!empty(githubRepo)) {
+  name: guid(acr.id, '${prefix}-ci-identity', roles.acrPush)
+  scope: acr
+  properties: {
+    principalId: ciIdentity!.properties.principalId
+    principalType: 'ServicePrincipal'
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', roles.acrPush)
+  }
+}
+
+resource ciApi 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (!empty(githubRepo)) {
+  name: guid(api.id, '${prefix}-ci-identity', roles.contributor)
+  scope: api
+  properties: {
+    principalId: ciIdentity!.properties.principalId
+    principalType: 'ServicePrincipal'
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', roles.contributor)
+  }
+}
+
 output storageAccount string = storage.name
 output lakeRoot string = 'abfss://lakehouse@${storage.name}.dfs.core.windows.net'
 output dataFactory string = adf.name
@@ -216,3 +273,5 @@ output accessConnectorId string = dbwConnector.id
 output dataFactoryPrincipalId string = adf.identity.principalId
 output acrLoginServer string = acr.properties.loginServer
 output apiUrl string = 'https://${api.properties.configuration.ingress.fqdn}'
+output containerApp string = api.name
+output ciClientId string = empty(githubRepo) ? '' : ciIdentity!.properties.clientId

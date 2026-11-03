@@ -38,7 +38,8 @@ jobs:
           docker logs api
 
   deploy:
-    # Ative criando a variável de repositório AZURE_DEPLOY=true e os segredos do OIDC.
+    # Ative criando a variável de repositório AZURE_DEPLOY=true e os segredos do OIDC. AZURE_CLIENT_ID é o
+    # client ID da identidade gerenciada stf-ci-identity (saída ciClientId do Bicep), federada a este ambiente.
     needs: docker
     if: github.ref == 'refs/heads/main' && vars.AZURE_DEPLOY == 'true'
     runs-on: ubuntu-latest
@@ -50,10 +51,11 @@ jobs:
           client-id: ${{ secrets.AZURE_CLIENT_ID }}
           tenant-id: ${{ secrets.AZURE_TENANT_ID }}
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
-      - name: Build no ACR
-        run: >
-          az acr build --registry ${{ vars.ACR_NAME }}
-          --image stf-api:${{ github.sha }} --file docker/Dockerfile .
+      - name: Build e push no ACR
+        run: |
+          az acr login --name ${{ vars.ACR_NAME }}
+          docker build -f docker/Dockerfile -t ${{ vars.ACR_NAME }}.azurecr.io/stf-api:${{ github.sha }} .
+          docker push ${{ vars.ACR_NAME }}.azurecr.io/stf-api:${{ github.sha }}
       - name: Nova revisão no Container Apps
         run: >
           az containerapp update --name ${{ vars.CONTAINERAPP_NAME }}

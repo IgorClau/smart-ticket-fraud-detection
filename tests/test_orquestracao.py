@@ -44,6 +44,18 @@ def test_placeholders_do_adf_sao_trocados_no_deploy():
             assert fixo in deploy, f"deploy.sh não substitui {fixo}"
 
 
+def test_job_cluster_e_politica_sao_de_no_unico():
+    # cota de estudante: 4 vCPU na família DDSv4 -> um nó só, e a política tem que aceitar o que o ADF pede
+    ls = json.loads((ADF / "linkedService" / "ls_databricks.json").read_text(encoding="utf-8"))["properties"]["typeProperties"]
+    politica = json.loads((config.ROOT / "mlops" / "infra" / "cluster_policy.json").read_text(encoding="utf-8"))
+    assert ls["newClusterNumOfWorker"] == "0" == str(politica["num_workers"]["value"])
+    assert ls["newClusterSparkConf"]["spark.databricks.cluster.profile"] == "singleNode"
+    assert ls["newClusterCustomTags"]["ResourceClass"] == "SingleNode"
+    assert ls["newClusterNodeType"] in politica["node_type_id"]["values"]
+    deploy = (config.ROOT / "mlops" / "infra" / "deploy.sh").read_text(encoding="utf-8")
+    assert "s#<adf-app-id>#" in deploy and "az acr build" not in deploy
+
+
 def test_registro_no_catalogo_e_neutro_sem_catalogo():
     # local/Docker: widget `catalog` vazio -> nada é registrado e o Spark nem é tocado
     from src.data_pipeline.spark.common import register_layer

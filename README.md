@@ -358,17 +358,40 @@ Documentação interativa em `localhost:8000/docs`.
 ## Nuvem (Azure)
 
 - **ADF** ([`mlops/adf`](mlops/adf)): Copy landing → raw particionado por data, notebooks Bronze → Silver
-  → Gold → TreinoScore em job cluster efêmero, atividade `Fail` com código `DQ_SILVER` quando a qualidade
-  bloqueia, trigger diário às 02:00.
+  → Gold → TreinoScore em job cluster efêmero de nó único (`Standard_D4ds_v4`), atividade `Fail` com código
+  `DQ_SILVER` quando a qualidade bloqueia, trigger diário às 02:00.
 - **Databricks** ([`src/data_pipeline/spark`](src/data_pipeline/spark)): notebooks em formato fonte
   (versionáveis), Delta por caminho registrado como tabela externa no Unity Catalog (`smart_ticket.<camada>.<tabela>`, widget `catalog`), `OPTIMIZE ZORDER BY card_id`. Validados
   localmente em Spark 4 + Delta 4 no container `docker/Dockerfile.spark`.
 - **Infra** ([`mlops/infra/main.bicep`](mlops/infra/main.bicep)): ADLS Gen2 sem chave compartilhada,
   ADF e Databricks com identidade gerenciada + RBAC, ACR, Container Apps escalando a zero.
-  O `deploy.sh` (7 passos) também prepara o Unity Catalog: credencial do access connector, locais externos,
-  catálogo/schemas, permissões da MSI do ADF e a política de cluster `stf-uc-jobs`.
+  O `deploy.sh` (checagem de cota + 7 passos) também prepara o Unity Catalog: credencial do access connector,
+  locais externos, catálogo/schemas, permissões da MSI do ADF e a política de cluster `stf-uc-jobs`
+  ([`cluster_policy.json`](mlops/infra/cluster_policy.json): nó único, modo dedicado à MSI do ADF).
 - **CI** ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)): testes → build + smoke test da imagem →
-  deploy no ACR/Container Apps via OIDC (liga com a variável `AZURE_DEPLOY=true`).
+  push no ACR e nova revisão no Container Apps via OIDC (liga com a variável `AZURE_DEPLOY=true`). O login usa
+  a identidade gerenciada `stf-ci-identity`, federada ao ambiente `production` do repositório — não precisa
+  de app registration.
+
+### Rodando numa conta Azure for Students
+
+A assinatura de estudante tem limites que o projeto já respeita:
+
+| Limite da assinatura | Como o projeto lida |
+|---|---|
+| Regiões permitidas por política (inclui `brazilsouth`) | `LOCATION=brazilsouth`, padrão do `deploy.sh` |
+| 6 vCPU por região; família DDSv5 com cota 0, DDSv4 com 4 | job cluster de **nó único** `Standard_D4ds_v4`; o passo 0 do `deploy.sh` confere a cota antes de criar qualquer coisa |
+| Tenant da universidade bloqueia app registration | CI entra por identidade gerenciada com credencial federada (`githubRepo` no Bicep) |
+| Build remoto do ACR (ACR Tasks) pode vir bloqueado | imagem construída com Docker local (ou no runner do GitHub) e enviada com `docker push` |
+| Crédito limitado | `DBW_SKU=trial`: Databricks Premium com DBU gratuito por 14 dias; depois, `DBW_SKU=premium` converte o mesmo workspace |
+
+Custo de referência em Brasil Sul (preço público): VM `D4ds_v4` US$ 0,36/h + DBU de jobs Premium
+US$ 0,30 — menos de US$ 1 por execução completa do pipeline nos 2.500 extratos; no trial, só a VM. Fixos:
+ACR Basic ~US$ 5/mês; Storage e Log Analytics, centavos. Para zerar tudo depois da demonstração:
+`az group delete -n rg-smart-ticket-fraud` (o grupo gerenciado do Databricks sai junto).
+
+Pré-requisitos na máquina: Azure CLI, Databricks CLI, Docker, `jq` e a extensão
+`az extension add -n datafactory`.
 - **Power BI** ([`mlops/powerbi`](mlops/powerbi)): esquema estrela sobre a gold e medidas DAX (operação,
   fila de auditoria, perfis, qualidade do modelo).
 
@@ -380,8 +403,8 @@ Documentação interativa em `localhost:8000/docs`.
 |---|---|
 | Fund. — SQL | ✅ esquema Postgres + 11 perguntas de negócio com CTEs e window functions (LAG/LEAD, NTILE, gaps and islands, média móvel) — [`sql/`](src/data_pipeline/sql) |
 | Fund. — Docker | ✅ API + Postgres + Spark em containers |
-| Fund. — Cloud | 🟡 código pronto (Bicep, ADF, notebooks); falta executar na conta Azure |
-| Fund. — Git | ✅ repositório com commits por etapa (falta publicar no GitHub) |
+| Fund. — Cloud | 🟡 código pronto e ajustado à conta Azure for Students (cota, região, CI sem app registration); falta executar o deploy |
+| Fund. — Git | ✅ repositório com commits por etapa, publicado no GitHub (privado) com CI |
 | Sprint 1 — MVP | ✅ reprodutível do gerador ao score |
 | Sprint 2 — Pipeline | ✅ medallion local + Databricks/ADF · ✅ dbt (11 modelos, 17 testes, paridade com a gold; alvo `azure` = Databricks SQL) |
 | Sprint 3 — Qualidade/prova | ✅ checagens bloqueantes, pytest, métricas com rótulo, SHAP, clusters · ✅ `Fila de Auditoria.pbix` + projeto PBIP (4 páginas, 24 medidas) · 🟡 publicar no Power BI Service |

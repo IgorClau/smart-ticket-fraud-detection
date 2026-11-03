@@ -1,19 +1,24 @@
 {
   "name": "ls_databricks",
   "properties": {
-    "description": "Workspace Databricks. MSI do ADF (Contributor no workspace) e job cluster efêmero por execução, criado pela política stf-uc-jobs (acesso compatível com Unity Catalog).",
+    "description": "Workspace Databricks. MSI do ADF (Contributor no workspace) e job cluster efêmero de nó único por execução (Standard_D4ds_v4: cabe na cota de 4 vCPU da família DDSv4 de uma assinatura Azure for Students), criado pela política stf-uc-jobs (modo dedicado à MSI do ADF, compatível com Unity Catalog).",
     "type": "AzureDatabricks",
     "typeProperties": {
       "domain": "https://adb-0000000000000000.0.azuredatabricks.net",
       "authentication": "MSI",
       "workspaceResourceId": "/subscriptions/<subscription-id>/resourceGroups/rg-smart-ticket-fraud/providers/Microsoft.Databricks/workspaces/dbw-smart-ticket-fraud",
       "newClusterVersion": "16.4.x-scala2.12",
-      "newClusterNumOfWorker": "1:4",
-      "newClusterNodeType": "Standard_D4ds_v5",
+      "newClusterNumOfWorker": "0",
+      "newClusterNodeType": "Standard_D4ds_v4",
       "policyId": "<cluster-policy-id>",
       "newClusterSparkConf": {
-        "spark.sql.shuffle.partitions": "64",
+        "spark.databricks.cluster.profile": "singleNode",
+        "spark.master": "local[*, 4]",
+        "spark.sql.shuffle.partitions": "8",
         "spark.databricks.delta.optimizeWrite.enabled": "true"
+      },
+      "newClusterCustomTags": {
+        "ResourceClass": "SingleNode"
       },
       "newClusterSparkEnvVars": {
         "PYSPARK_PYTHON": "/databricks/python3/bin/python3"

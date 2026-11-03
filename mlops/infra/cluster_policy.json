@@ -1,0 +1,8 @@
+{
+  "data_security_mode": { "type": "fixed", "value": "SINGLE_USER" },
+  "single_user_name": { "type": "fixed", "value": "<adf-app-id>" },
+  "num_workers": { "type": "fixed", "value": 0, "hidden": true },
+  "spark_conf.spark.databricks.cluster.profile": { "type": "fixed", "value": "singleNode", "hidden": true },
+  "custom_tags.ResourceClass": { "type": "fixed", "value": "SingleNode", "hidden": true },
+  "node_type_id": { "type": "allowlist", "values": ["Standard_D4ds_v4", "Standard_D4ds_v5"], "defaultValue": "Standard_D4ds_v4" }
+}
