@@ -55,3 +55,16 @@ def test_fato_mensal_preserva_os_totais_do_diario(passageiro_regular, passageiro
         assert mes[col].sum() == dia[col].sum()
     assert mes["valor_debitado"].sum() == pytest.approx(dia["valor_debitado"].sum())
     assert not mes.duplicated(["card_id", "ano_mes", "operador_display", "codigo_linha", "tipo_linha"]).any()
+
+
+def test_treino_le_a_gold_em_ordem_fixa(tmp_path):
+    # o Spark devolve a gold em outra ordem; o split e o Isolation Forest não podem depender disso
+    from src.training.train import load_dataset
+
+    ids = [f"42.00000000{i}-1" for i in range(6)]
+    gold, silver = tmp_path / "gold", tmp_path / "silver"
+    gold.mkdir(), silver.mkdir()
+    pd.DataFrame({"card_id": ids[::-1], "x": range(6)}).to_parquet(gold / "card_features.parquet", index=False)
+    pd.DataFrame({"card_id": ids[3:] + ids[:3], "nome": list("abcdef")}).to_parquet(silver / "cards.parquet", index=False)
+    df = load_dataset(gold, silver)
+    assert df["card_id"].tolist() == ids and df.index.tolist() == list(range(6))

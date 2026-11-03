@@ -47,7 +47,9 @@ def load_dataset(gold_dir: Path, silver_dir: Path) -> pd.DataFrame:
     if lab.exists():
         labels = pd.read_parquet(lab)[["card_id", "classe", "is_fraude", "tipos_fraude"]]
         df = df.merge(labels, on="card_id", how="left")
-    return df
+    # ordem fixa: o split e a amostragem do Isolation Forest dependem da posição das linhas, e o Spark
+    # (Databricks) não devolve a gold na mesma ordem que o pandas — sem isso, local e Azure divergem
+    return df.sort_values("card_id", kind="stable").reset_index(drop=True)
 
 
 def _benchmarks(cfg: dict, feats: list[str], det: FraudDetector, tr: pd.DataFrame, te: pd.DataFrame) -> dict:

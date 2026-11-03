@@ -21,7 +21,7 @@ orquestração no Azure Data Factory, modelo de anomalia e deploy em container.
 | Modelo (Isolation Forest, sem rótulo) | **ROC-AUC 0,916 · PR-AUC 0,846** no teste |
 | Fila de auditoria (top 10% dos cartões) | **precisão 97%**, lift 3,9× sobre o acaso |
 | Features | **42** por cartão na gold (`card_features`); o modelo usa **36** delas (`mlops/model_config.yml`) — as 6 restantes são contagens/valores brutos usados só no BI |
-| Testes | **35 pytest** (gerador, ingestão, lotes/quarentena, silver + qualidade, features, modelo, API, contrato de orquestração) + 1 paridade pandas × PySpark (roda no container Spark) · **17 testes dbt** (incl. paridade SQL × Python) |
+| Testes | **37 pytest** (gerador, ingestão, lotes/quarentena, silver + qualidade, features, modelo, API, contrato de orquestração) + 1 paridade pandas × PySpark (roda no container Spark) · **17 testes dbt** (incl. paridade SQL × Python) |
 
 Cada alerta vem com o **motivo** (SHAP). Exemplo real da fila:
 
@@ -221,7 +221,7 @@ No **Git Bash**, rode antes `export MSYS_NO_PATHCONV=1`: sem isso o Git Bash con
 caminho do Windows (`C:/Program Files/Git/workspace/...`) e o Spark falha com
 `No FileSystem for scheme "C"`. No PowerShell não é preciso.
 
-Deploy no Azure (depois de `az login` e `databricks auth login`): [`mlops/infra/deploy.sh`](mlops/infra/deploy.sh).
+Deploy no Azure (depois de `az login`; o Databricks CLI usa o mesmo login): [`mlops/infra/deploy.sh`](mlops/infra/deploy.sh).
 
 Power BI: `python -m src.data_pipeline.export_bi` grava em `data/processed/powerbi` a gold do
 `viacard_v44` (2.500 cartões, fila de 250), que é o que o relatório *Fila de Auditoria* lê — passo a passo no
@@ -362,7 +362,8 @@ Documentação interativa em `localhost:8000/docs`.
   `DQ_SILVER` quando a qualidade bloqueia, trigger diário às 02:00.
 - **Databricks** ([`src/data_pipeline/spark`](src/data_pipeline/spark)): notebooks em formato fonte
   (versionáveis), Delta por caminho registrado como tabela externa no Unity Catalog (`smart_ticket.<camada>.<tabela>`, widget `catalog`), `OPTIMIZE ZORDER BY card_id`. Validados
-  localmente em Spark 4 + Delta 4 no container `docker/Dockerfile.spark`.
+  localmente em Spark 4 + Delta 4 no container `docker/Dockerfile.spark` e executados no Azure Databricks
+  (runtime 17.3 LTS) a partir de `/Workspace/Shared/smart-ticket-fraud-detection` (`databricks sync`).
 - **Infra** ([`mlops/infra/main.bicep`](mlops/infra/main.bicep)): ADLS Gen2 sem chave compartilhada,
   ADF e Databricks com identidade gerenciada + RBAC, ACR, Container Apps escalando a zero.
   O `deploy.sh` (checagem de cota + 7 passos) também prepara o Unity Catalog: credencial do access connector,
@@ -385,15 +386,22 @@ A assinatura de estudante tem limites que o projeto já respeita:
 | 6 vCPU por região; família DDSv5 com cota 0, DDSv4 com 4 | job cluster de **nó único** `Standard_D4ds_v4`; o passo 0 do `deploy.sh` confere a cota antes de criar qualquer coisa |
 | Tenant da universidade bloqueia app registration | CI entra por identidade gerenciada com credencial federada (`githubRepo` no Bicep) |
 | Build remoto do ACR (ACR Tasks) pode vir bloqueado | imagem construída com Docker local (ou no runner do GitHub) e enviada com `docker push` |
-| Crédito limitado | `DBW_SKU=trial`: Databricks Premium com DBU gratuito por 14 dias; depois, `DBW_SKU=premium` converte o mesmo workspace |
+| Databricks trial recusado (`TrialSkuNotSupportedForSubscriptionType`) | workspace `premium` (padrão do `deploy.sh`); o cluster só existe enquanto o job roda |
 
 Custo de referência em Brasil Sul (preço público): VM `D4ds_v4` US$ 0,36/h + DBU de jobs Premium
-US$ 0,30 — menos de US$ 1 por execução completa do pipeline nos 2.500 extratos; no trial, só a VM. Fixos:
+US$ 0,30 — menos de US$ 1 por execução completa do pipeline nos 2.500 extratos. Fixos:
 ACR Basic ~US$ 5/mês; Storage e Log Analytics, centavos. Para zerar tudo depois da demonstração:
 `az group delete -n rg-smart-ticket-fraud` (o grupo gerenciado do Databricks sai junto).
 
 Pré-requisitos na máquina: Azure CLI, Databricks CLI, Docker, `jq` e a extensão
 `az extension add -n datafactory`.
+
+**Executado em 02/11/2026** nessa conta: a primeira execução do pipeline passou nas seis atividades em ~37 min
+(Copy 46 s · Bronze 13 min · Silver 11 min · Gold 7 min · TreinoScore 5 min, metade disso subindo o cluster),
+gravou `smart_ticket.silver.*` e `smart_ticket.gold.*` no Unity Catalog, e a API responde em Container Apps com
+o modelo carregado. As métricas do treino no Databricks são as mesmas do local (ROC-AUC 0,916, 250 alertas):
+o treino ordena a gold por `card_id`, porque o Spark não devolve as linhas na ordem do pandas e o split e o
+Isolation Forest dependem dela.
 
 ---
 
@@ -403,7 +411,7 @@ Pré-requisitos na máquina: Azure CLI, Databricks CLI, Docker, `jq` e a extens�
 |---|---|
 | Fund. — SQL | ✅ esquema Postgres + 11 perguntas de negócio com CTEs e window functions (LAG/LEAD, NTILE, gaps and islands, média móvel) — [`sql/`](src/data_pipeline/sql) |
 | Fund. — Docker | ✅ API + Postgres + Spark em containers |
-| Fund. — Cloud | 🟡 código pronto e ajustado à conta Azure for Students (cota, região, CI sem app registration); falta executar o deploy |
+| Fund. — Cloud | ✅ deploy executado na conta Azure for Students (02/11/2026): ADF → Databricks → Unity Catalog e API no Container Apps; falta ligar o deploy pelo CI |
 | Fund. — Git | ✅ repositório com commits por etapa, publicado no GitHub (privado) com CI |
 | Sprint 1 — MVP | ✅ reprodutível do gerador ao score |
 | Sprint 2 — Pipeline | ✅ medallion local + Databricks/ADF · ✅ dbt (11 modelos, 17 testes, paridade com a gold; alvo `azure` = Databricks SQL) |

@@ -5,8 +5,8 @@
     "parameters": {
       "lake_root": { "type": "string", "defaultValue": "abfss://lakehouse@stfdatalake.dfs.core.windows.net" },
       "raw_root": { "type": "string", "defaultValue": "abfss://raw@stfdatalake.dfs.core.windows.net/extratos" },
-      "bases_dir": { "type": "string", "defaultValue": "/Workspace/Repos/smart-ticket-fraud-detection/data/synthetic/bases" },
-      "repo_path": { "type": "string", "defaultValue": "/Repos/smart-ticket-fraud-detection" },
+      "bases_dir": { "type": "string", "defaultValue": "/Workspace/Shared/smart-ticket-fraud-detection/data/synthetic/bases" },
+      "repo_path": { "type": "string", "defaultValue": "/Shared/smart-ticket-fraud-detection" },
       "catalog": { "type": "string", "defaultValue": "smart_ticket" }
     },
     "variables": {

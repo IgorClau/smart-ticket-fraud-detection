@@ -1,21 +1,25 @@
 #!/usr/bin/env bash
-# Deploy completo no Azure. Pré-requisitos: az login, databricks CLI autenticado no workspace
-# (databricks auth login --host <url>, depois do passo 1), extensão `az extension add -n datafactory`, jq.
+# Deploy completo no Azure. Pré-requisitos: az login (o Databricks CLI usa o mesmo login, auth azure-cli),
+# Databricks CLI, extensão `az extension add -n datafactory`, jq.
 # Docker local para publicar a imagem da API. Nada aqui roda sozinho no CI: é o roteiro do primeiro deploy.
 #
 #   RG=rg-smart-ticket-fraud LOCATION=brazilsouth ./mlops/infra/deploy.sh
 #
-# Azure for Students: DBW_SKU=trial (padrão) zera o DBU por 14 dias; depois, DBW_SKU=premium no mesmo
-# comando converte o workspace. O job cluster é de nó único Standard_D4ds_v4 (4 vCPU, família DDSv4).
+# Azure for Students: o Databricks só aceita premium (o trial é recusado nesse tipo de assinatura); em conta
+# paga, DBW_SKU=trial zera o DBU por 14 dias. O job cluster é de nó único Standard_D4ds_v4 (4 vCPU, família DDSv4).
 set -euo pipefail
+# Git Bash (Windows): não converter argumentos como /Repos/... em caminho de disco; os caminhos de arquivo
+# vão no formato C:/... (pwd -W), que az, jq e docker nativos do Windows entendem.
+export MSYS_NO_PATHCONV=1
+caminho() { (cd "$1" && (pwd -W 2>/dev/null || pwd)); }
 
 RG=${RG:-rg-smart-ticket-fraud}
 LOCATION=${LOCATION:-brazilsouth}
 PREFIX=${PREFIX:-stf}
 CATALOG=${CATALOG:-smart_ticket}
-DBW_SKU=${DBW_SKU:-trial}
+DBW_SKU=${DBW_SKU:-premium}
 GITHUB_REPO=${GITHUB_REPO:-IgorClau/smart-ticket-fraud-detection}
-ROOT=$(cd "$(dirname "$0")/../.." && pwd)
+ROOT=$(caminho "$(dirname "$0")/../..")
 OPERADOR=$(az ad signed-in-user show --query id -o tsv)
 PARAMS=(prefix="$PREFIX" operatorPrincipalId="$OPERADOR" databricksSku="$DBW_SKU" githubRepo="$GITHUB_REPO")
 
@@ -40,7 +44,7 @@ DBW_URL=$(jq -r .databricksUrl.value <<<"$OUT")
 DBW_NAME=$(jq -r .databricksWorkspace.value <<<"$OUT")
 CONNECTOR=$(jq -r .accessConnectorId.value <<<"$OUT")
 ADF_APP=$(az ad sp show --id "$(jq -r .dataFactoryPrincipalId.value <<<"$OUT")" --query appId -o tsv)
-export DATABRICKS_HOST="$DBW_URL"
+export DATABRICKS_HOST="$DBW_URL" DATABRICKS_AUTH_TYPE=azure-cli
 
 echo "==> 2/7 imagem da API no ACR e nova revisão do Container Apps"
 # Build local + push: o build remoto do ACR (ACR Tasks) costuma vir bloqueado em assinaturas de crédito gratuito.
@@ -50,11 +54,10 @@ docker push "$ACR/stf-api:latest"
 az deployment group create -g "$RG" -f "$ROOT/mlops/infra/main.bicep" \
    -p "${PARAMS[@]}" apiImage="$ACR/stf-api:latest" -o none
 
-echo "==> 3/7 repositório no Databricks (Git folder)"
-# Repositório privado: antes, `databricks git-credentials create gitHub --git-username <usuário>
-# --personal-access-token <PAT só com leitura do repo>` (uma vez por workspace).
-databricks repos create "https://github.com/$GITHUB_REPO" gitHub \
-   --path /Repos/smart-ticket-fraud-detection || echo "repo já existe"
+echo "==> 3/7 código no workspace Databricks (/Workspace/Shared, legível pela MSI do ADF)"
+# Arquivos versionados (respeita o .gitignore), sem Git folder: repositório privado não exige token no
+# workspace e o job do ADF, que roda como a MSI, lê a pasta Shared. Rode de novo a cada mudança no código.
+databricks sync --full "$ROOT" /Workspace/Shared/smart-ticket-fraud-detection
 
 echo "==> 4/7 Unity Catalog: credencial, locais externos, catálogo, schemas e permissões do ADF"
 # O access connector (identidade gerenciada com Storage Blob Data Contributor) é a credencial do lake.
@@ -66,9 +69,12 @@ done
 databricks catalogs create "$CATALOG" --storage-root "abfss://lakehouse@$STORAGE.dfs.core.windows.net/uc" || echo "catálogo já existe"
 for s in bronze silver gold; do databricks schemas create "$s" "$CATALOG" || echo "schema $s já existe"; done
 # A MSI do ADF dispara os jobs: precisa existir no workspace e ter acesso ao catálogo e aos locais externos.
-databricks service-principals create --json "{\"application_id\": \"$ADF_APP\", \"display_name\": \"$ADF\"}" \
+databricks service-principals create --json "{\"applicationId\": \"$ADF_APP\", \"displayName\": \"$ADF\"}" \
   || echo "service principal já existe"
 databricks grants update catalog "$CATALOG" --json "{\"changes\": [{\"principal\": \"$ADF_APP\", \"add\": [\"ALL_PRIVILEGES\"]}]}"
+# As tabelas nascem com a MSI como dona; quem opera precisa do grant para consultar e rodar notebooks à mão.
+OPERADOR_UPN=$(az ad signed-in-user show --query userPrincipalName -o tsv)
+databricks grants update catalog "$CATALOG" --json "{\"changes\": [{\"principal\": \"$OPERADOR_UPN\", \"add\": [\"ALL_PRIVILEGES\"]}]}"
 for c in raw lakehouse; do
   databricks grants update external_location "stf_$c" \
     --json "{\"changes\": [{\"principal\": \"$ADF_APP\", \"add\": [\"READ_FILES\", \"WRITE_FILES\", \"CREATE_EXTERNAL_TABLE\"]}]}"
@@ -82,9 +88,15 @@ if [ -z "$POLICY_ID" ]; then
 else
   databricks cluster-policies edit "$POLICY_ID" --name stf-uc-jobs --definition "$POLICY_DEF"
 fi
+# A MSI cria o job cluster pela política e roda os notebooks da pasta Shared.
+databricks permissions update cluster-policies "$POLICY_ID" \
+  --json "{\"access_control_list\": [{\"service_principal_name\": \"$ADF_APP\", \"permission_level\": \"CAN_USE\"}]}"
+CODIGO_ID=$(databricks workspace get-status /Shared/smart-ticket-fraud-detection -o json | jq -r .object_id)
+databricks permissions update directories "$CODIGO_ID" \
+  --json "{\"access_control_list\": [{\"service_principal_name\": \"$ADF_APP\", \"permission_level\": \"CAN_READ\"}]}"
 
 echo "==> 5/7 artefatos do Data Factory (placeholders trocados pelos nomes reais)"
-TMP=$(mktemp -d)
+TMP=$(caminho "$(mktemp -d)")
 for f in "$ROOT"/mlops/adf/*/*.json; do
   sed -e "s#stfdatalake#$STORAGE#g" -e "s#https://adb-0000000000000000.0.azuredatabricks.net#$DBW_URL#g" \
       -e "s#<subscription-id>#$(az account show --query id -o tsv)#g" -e "s#rg-smart-ticket-fraud#$RG#g" \

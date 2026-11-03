@@ -7,7 +7,7 @@
       "domain": "https://adb-0000000000000000.0.azuredatabricks.net",
       "authentication": "MSI",
       "workspaceResourceId": "/subscriptions/<subscription-id>/resourceGroups/rg-smart-ticket-fraud/providers/Microsoft.Databricks/workspaces/dbw-smart-ticket-fraud",
-      "newClusterVersion": "16.4.x-scala2.12",
+      "newClusterVersion": "17.3.x-scala2.13",
       "newClusterNumOfWorker": "0",
       "newClusterNodeType": "Standard_D4ds_v4",
       "policyId": "<cluster-policy-id>",

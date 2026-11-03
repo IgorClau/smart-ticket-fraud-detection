@@ -18,7 +18,7 @@ param apiImage string = 'mcr.microsoft.com/k8se/quickstart:latest'
 @description('Object ID de quem opera o projeto (az ad signed-in-user show --query id). Recebe acesso de dados ao lake para a carga inicial; vazio = nenhum.')
 param operatorPrincipalId string = ''
 
-@description('Plano do Databricks. trial = Premium com DBU gratuito por 14 dias (depois, redeploy com premium converte o mesmo workspace).')
+@description('Plano do Databricks. trial = Premium com DBU gratuito por 14 dias, só em assinatura paga (Azure for Students e Free Trial recusam).')
 @allowed(['premium', 'trial'])
 param databricksSku string = 'premium'
 

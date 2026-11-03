@@ -1,5 +1,5 @@
 # Validação local dos notebooks Databricks (docker/Dockerfile.spark, Python 3.12).
-# Equivale ao Databricks Runtime 16.x (Spark 4 / Delta 4).
+# Equivale ao Databricks Runtime 17.3 LTS (Spark 4.0 / Delta 4), o do job cluster do ADF.
 pyspark==4.0.1
 delta-spark==4.0.0
 pandas==2.2.3
