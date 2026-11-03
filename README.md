@@ -372,6 +372,8 @@ Documentação interativa em `localhost:8000/docs`.
   push no ACR e nova revisão no Container Apps via OIDC (liga com a variável `AZURE_DEPLOY=true`). O login usa
   a identidade gerenciada `stf-ci-identity`, federada ao ambiente `production` do repositório — não precisa
   de app registration.
+- **Power BI** ([`mlops/powerbi`](mlops/powerbi)): esquema estrela sobre a gold e medidas DAX (operação,
+  fila de auditoria, perfis, qualidade do modelo).
 
 ### Rodando numa conta Azure for Students
 
@@ -392,8 +394,6 @@ ACR Basic ~US$ 5/mês; Storage e Log Analytics, centavos. Para zerar tudo depois
 
 Pré-requisitos na máquina: Azure CLI, Databricks CLI, Docker, `jq` e a extensão
 `az extension add -n datafactory`.
-- **Power BI** ([`mlops/powerbi`](mlops/powerbi)): esquema estrela sobre a gold e medidas DAX (operação,
-  fila de auditoria, perfis, qualidade do modelo).
 
 ---
 
