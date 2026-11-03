@@ -60,6 +60,17 @@ echo "==> 3/7 código no workspace Databricks (/Workspace/Shared, legível pela 
 databricks sync --full "$ROOT" /Workspace/Shared/smart-ticket-fraud-detection
 
 echo "==> 4/7 Unity Catalog: credencial, locais externos, catálogo, schemas e permissões do ADF"
+# O metastore é da região, não do grupo de recursos: depois de um `az group delete`, catálogo, locais
+# externos e credencial continuam lá. O connector recriado tem o mesmo ID de recurso, mas outra identidade, e a
+# credencial antiga falha com "user delegation key is not authorized": credencial mais velha que o connector = limpa.
+CRED_MS=$(databricks storage-credentials get stf_lake -o json 2>/dev/null | jq -r '.created_at // empty' || true)
+CONN_S=$(date -d "$(az resource show --ids "$CONNECTOR" --query systemData.createdAt -o tsv)" +%s)
+if [ -n "$CRED_MS" ] && [ $((CRED_MS / 1000)) -lt "$CONN_S" ]; then
+  echo "Unity Catalog com objetos de um deploy apagado: removendo catálogo, locais externos e credencial"
+  databricks catalogs delete "$CATALOG" --force || true
+  for c in raw lakehouse; do databricks external-locations delete "stf_$c" --force || true; done
+  databricks storage-credentials delete stf_lake --force
+fi
 # O access connector (identidade gerenciada com Storage Blob Data Contributor) é a credencial do lake.
 databricks storage-credentials create --json \
   "{\"name\": \"stf_lake\", \"azure_managed_identity\": {\"access_connector_id\": \"$CONNECTOR\"}}" || echo "credencial já existe"
