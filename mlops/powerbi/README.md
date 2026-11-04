@@ -179,6 +179,14 @@ páginas (Operação, Fila de auditoria, Perfis, Qualidade do modelo) no formato
 python mlops/powerbi/gerar_relatorio_pbir.py "<pasta>/Fila de Auditoria.Report" "<tema>/Fluent2-CY26SU08.json"
 ```
 
+**Aparência (tema escuro-pastel).** O gerador registra por cima do tema base o
+[`tema_smart_ticket_escuro.json`](tema_smart_ticket_escuro.json): fundo `#2B2F3A`, visuais em `#353A47` com
+cantos de 12 px, texto `#E6E9EF`/`#B7BDCA` e séries em azul, rosa, verde e amarelo pastéis. Em cada página,
+título de 18 pt com o subtítulo "Smart Ticket Fraud Detection · viacard_v44 · 2.500 cartões". O eixo da taxa de
+fraude no gráfico de decis vai de 0 a 100% (os decis 9 e 10 passam de 50% e ficavam cortados). Para usar o tema
+num relatório feito à mão: *Exibir → Temas → Procurar temas*. O passo a passo completo, do zero até esses
+ajustes, está em `04.5 - Power BI/04.5.3 - Treinamento Power BI para este case.docx`, no Case.
+
 ---
 
 ## 6. Páginas sugeridas

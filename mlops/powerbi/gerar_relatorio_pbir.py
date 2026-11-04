@@ -2,8 +2,13 @@
 import json, os, shutil, sys, itertools
 
 REPORT_DIR = sys.argv[1]          # ...\Fila de Auditoria.Report
-THEME_SRC = sys.argv[2]           # Fluent2-CY26SU08.json extraído do pbix
+THEME_SRC = sys.argv[2]           # Fluent2-CY26SU08.json extraído do pbix (tema base)
+CUSTOM_SRC = (sys.argv[3] if len(sys.argv) > 3 else
+              os.path.join(os.path.dirname(os.path.abspath(__file__)), "tema_smart_ticket_escuro.json"))
 THEME = "Fluent2-CY26SU08"
+CUSTOM = "SmartTicketEscuro.json"   # tema escuro-pastel por cima do base (RegisteredResources)
+TXT, TXT2 = "#E6E9EF", "#B7BDCA"     # texto principal e secundário do tema
+SUBTITULO = "Smart Ticket Fraud Detection · viacard_v44 · 2.500 cartões"
 SCH = "https://developer.microsoft.com/json-schemas/fabric/item/report/definition"
 VIS_SCHEMA = f"{SCH}/visualContainer/2.0.0/schema.json"
 M = "_Medidas"
@@ -83,13 +88,19 @@ class Page:
             v["visualContainerObjects"] = title(text)
         self._add(x, y, w, h, v, filters)
 
-    def textbox(self, x, y, w, h, text, size="20pt", bold=True):
-        style = {"fontSize": size}
+    def textbox(self, x, y, w, h, text, size="20pt", bold=True, color=TXT, sub=None):
+        style = {"fontSize": size, "color": color}
         if bold:
             style["fontWeight"] = "bold"
+        paras = [{"textRuns": [{"value": text, "textStyle": style}]}]
+        if sub:
+            paras.append({"textRuns": [{"value": sub, "textStyle": {"fontSize": "10pt", "color": TXT2}}]})
         v = {"visualType": "textbox", "drillFilterOtherVisuals": True,
-             "objects": {"general": [{"properties": {"paragraphs": [{"textRuns": [{"value": text, "textStyle": style}]}]}}]}}
+             "objects": {"general": [{"properties": {"paragraphs": paras}}]}}
         self._add(x, y, w, h, v)
+
+    def cabecalho(self, w, text):
+        self.textbox(16, 2, w, 66, text, size="18pt", sub=SUBTITULO)
 
     def card(self, x, y, m, w=236, h=100):
         self.visual("card", x, y, w, h, {"Values": [measure(m)]}, text=m,
@@ -120,7 +131,7 @@ EM_ALERTA = cat_filter(CS, "status_alerta", ["Em alerta"])
 
 # ---------------- Operação ----------------
 p1 = Page("operacao", "Operação")
-p1.textbox(16, 8, 640, 48, "Operação — embarques e receita")
+p1.cabecalho(640, "Operação — embarques e receita")
 p1.slicer(852, 4, ANO, "Ano")
 p1.slicer(1064, 4, OPER, "Operadora")
 for i, m in enumerate(["Embarques", "Receita", "Ticket Médio", "Cartões Ativos", "Recarregado"]):
@@ -138,7 +149,7 @@ p1.visual("tableEx", 652, 468, 612, 236, {"Values": [OPER, measure("Embarques"),
 
 # ---------------- Fila de auditoria ----------------
 p2 = Page("fila", "Fila de auditoria")
-p2.textbox(16, 8, 620, 48, "Fila de auditoria — cartões priorizados")
+p2.cabecalho(620, "Fila de auditoria — cartões priorizados")
 p2.slicer(652, 4, col(CS, "cluster"), "Cluster", w=190)
 p2.slicer(852, 4, col(CS, "motivo_principal"), "Motivo principal", w=412)
 for i, m in enumerate(["Cartões em Alerta", "% Cartões em Alerta", "Receita em Cartões em Alerta", "Score Médio"]):
@@ -154,7 +165,7 @@ p2.visual("lineChart", 852, 464, 412, 240, {"Category": [ANOMES], "Y": [measure(
 
 # ---------------- Perfis ----------------
 p3 = Page("perfis", "Perfis")
-p3.textbox(16, 8, 640, 48, "Perfis de uso — clusters")
+p3.cabecalho(640, "Perfis de uso — clusters")
 p3.visual("scatterChart", 16, 68, 700, 636, {"Category": [col(CS, "cluster")], "Series": [col(CS, "cluster")],
           "X": [measure("Score Médio")], "Y": [measure("% Cartões em Alerta")], "Size": [measure("Cartões")]},
           text="Clusters: score médio × % em alerta (tamanho = cartões)")
@@ -167,7 +178,7 @@ p3.visual("clusteredColumnChart", 732, 384, 532, 320, {"Category": [col(CS, "clu
 
 # ---------------- Qualidade do modelo ----------------
 p4 = Page("qualidade", "Qualidade do modelo")
-p4.textbox(16, 8, 900, 48, "Qualidade do modelo (somente cartões com rótulo)")
+p4.cabecalho(900, "Qualidade do modelo (somente cartões com rótulo)")
 for i, m in enumerate(["Precisão da Fila", "Recall da Fila", "Taxa de Fraude", "Fraudes Reais", "Cartões Rotulados"]):
     p4.card(16 + i * 250, 68, m)
 p4.visual("lineClusteredColumnComboChart", 16, 184, 1248, 420, {"Category": [col(CS, "decil_score")],
@@ -175,13 +186,14 @@ p4.visual("lineClusteredColumnComboChart", 16, 184, 1248, 420, {"Category": [col
           text="Taxa de fraude por decil de anomaly_score (10 = mais anômalos)",
           sort=(col(CS, "decil_score"), "Ascending"),
           objects={"categoryAxis": [{"properties": {"axisType": lit("Categorical")}}],
-                   "valueAxis": [{"properties": {"secStart": lit(0), "secEnd": lit(0.5)}}],
+                   # eixo da taxa até 100%: os decis 9 e 10 passam de 50% e a linha saía do gráfico
+                   "valueAxis": [{"properties": {"secStart": lit(0), "secEnd": lit(1)}}],
                    "lineStyles": [{"properties": {"lineChartType": lit("linear")}}],
                    "labels": [{"properties": {"show": lit(True)}}]})
 p4.textbox(16, 620, 1248, 84,
            "Leitura: a Precisão da Fila deve ficar bem acima da Taxa de Fraude base; se a taxa por decil for plana, "
            "o score não está separando fraude de uso normal. Cartões sem rótulo (dados reais) ficam fora destas métricas.",
-           size="11pt", bold=False)
+           size="11pt", bold=False, color=TXT2)
 
 PAGES = [p1, p2, p3, p4]
 
@@ -210,10 +222,15 @@ write(os.path.join(D, "report.json"), {
     "$schema": f"{SCH}/report/3.3.0/schema.json",
     "themeCollection": {"baseTheme": {"name": THEME,
                                       "reportVersionAtImport": {"visual": "2.12.0", "report": "3.4.0", "page": "2.3.1"},
-                                      "type": "SharedResources"}},
+                                      "type": "SharedResources"},
+                        "customTheme": {"name": CUSTOM,
+                                        "reportVersionAtImport": {"visual": "2.12.0", "report": "3.4.0", "page": "2.3.1"},
+                                        "type": "RegisteredResources"}},
     "objects": {"section": [{"properties": {"verticalAlignment": lit("Top")}}]},
     "resourcePackages": [{"name": "SharedResources", "type": "SharedResources",
-                          "items": [{"name": THEME, "path": f"BaseThemes/{THEME}.json", "type": "BaseTheme"}]}],
+                          "items": [{"name": THEME, "path": f"BaseThemes/{THEME}.json", "type": "BaseTheme"}]},
+                         {"name": "RegisteredResources", "type": "RegisteredResources",
+                          "items": [{"name": CUSTOM, "path": CUSTOM, "type": "CustomTheme"}]}],
     "settings": {"useStylableVisualContainerHeader": True, "exportDataMode": "AllowSummarized",
                  "defaultDrillFilterOtherVisuals": True, "allowChangeFilterTypes": True,
                  "useEnhancedTooltips": True, "useDefaultAggregateDisplayName": True}})
@@ -229,5 +246,9 @@ for p in PAGES:
 
 theme_dst = os.path.join(REPORT_DIR, "StaticResources", "SharedResources", "BaseThemes", f"{THEME}.json")
 os.makedirs(os.path.dirname(theme_dst), exist_ok=True)
-shutil.copyfile(THEME_SRC, theme_dst)
+if os.path.abspath(THEME_SRC) != os.path.abspath(theme_dst):
+    shutil.copyfile(THEME_SRC, theme_dst)
+custom_dst = os.path.join(REPORT_DIR, "StaticResources", "RegisteredResources", CUSTOM)
+os.makedirs(os.path.dirname(custom_dst), exist_ok=True)
+shutil.copyfile(CUSTOM_SRC, custom_dst)
 print("ok:", len(PAGES), "páginas,", sum(len(p.visuals) for p in PAGES), "visuais")
