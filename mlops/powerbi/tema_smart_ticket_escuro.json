@@ -63,7 +63,7 @@
     },
     "tableEx": {
       "*": {
-        "grid": [{ "gridVertical": false, "gridHorizontal": true, "gridHorizontalColor": { "solid": { "color": "#454B5A" } }, "rowPadding": 4 }],
+        "grid": [{ "gridVertical": false, "gridHorizontal": true, "gridHorizontalColor": { "solid": { "color": "#454B5A" } }, "rowPadding": 2 }],
         "columnHeaders": [{ "fontColor": { "solid": { "color": "#E6E9EF" } }, "backColor": { "solid": { "color": "#3E4454" } } }],
         "values": [{
           "fontColorPrimary": { "solid": { "color": "#E6E9EF" } }, "backColorPrimary": { "solid": { "color": "#353A47" } },
