@@ -1,13 +1,21 @@
 # Smart Ticket Fraud Detection
 
 Detecção de fraude em **bilhetagem eletrônica de transporte público** (cartão ViaCard, corredor Sul
-Fluminense – RJ), do extrato bruto do cartão até um score explicado servido por API.
-Projeto de portfólio para **Engenharia de Dados**: pipeline medallion, qualidade de dados, Spark/Delta,
-orquestração no Azure Data Factory, modelo de anomalia e deploy em container.
+Fluminense – RJ), do extrato bruto do cartão até uma fila de auditoria explicada, servida por API e
+acompanhada no Power BI. Projeto de portfólio para **Engenharia de Dados**: pipeline medallion,
+qualidade de dados, Spark/Delta, orquestração no Azure Data Factory, Unity Catalog, modelo de anomalia,
+dbt e deploy em container — **executado de ponta a ponta no Azure**.
 
-> **Stack:** Python · pandas · PySpark + Delta Lake (Databricks) · Azure Data Factory · ADLS Gen2 ·
-> PostgreSQL · dbt (DuckDB local / Databricks SQL) · scikit-learn + SHAP · FastAPI · Docker ·
+> **Stack:** Python · pandas · PySpark + Delta Lake (Azure Databricks, Unity Catalog) · Azure Data Factory ·
+> ADLS Gen2 · dbt (DuckDB local / Databricks SQL) · PostgreSQL · scikit-learn + SHAP · FastAPI · Docker ·
 > Azure Container Apps · Bicep · GitHub Actions · Power BI
+
+**Sumário:** [Resultado](#resultado-em-30-segundos) · [Executado no Azure](#executado-no-azure) ·
+[Arquitetura](#arquitetura) · [Dados](#os-dados-por-que-o-gerador-teve-de-mudar) ·
+[Pipeline](#pipeline-medallion) · [Features](#features) · [Modelo](#modelo-e-avaliação) ·
+[Power BI](#power-bi) · [API](#api) · [Nuvem](#nuvem-azure) · [Como rodar](#como-rodar) ·
+[Estrutura](#estrutura) · [Status](#status-do-cronograma) · [Decisões](#diário-de-decisões) ·
+[Narrativa](#narrativa-de-2-minutos)
 
 ---
 
@@ -17,11 +25,13 @@ orquestração no Azure Data Factory, modelo de anomalia e deploy em container.
 |---|---|
 | Dados | **2.500 cartões**, **7,77 milhões de transações** (≈5 anos cada), 24,8% de cartões com fraude rotulada |
 | Pipeline local ponta a ponta | **8 min** (ingestão de 2.500 `.xlsx` em 3 min com leitura paralela) |
+| Pipeline no Azure (ADF → Databricks) | **≈37 min**, seis atividades verdes, mesmas métricas do local |
 | Qualidade | **20/20** checagens aprovadas na silver (erro = pipeline para) |
 | Modelo (Isolation Forest, sem rótulo) | **ROC-AUC 0,916 · PR-AUC 0,846** no teste |
-| Fila de auditoria (top 10% dos cartões) | **precisão 97%**, lift 3,9× sobre o acaso |
+| Fila de auditoria (top 10% dos cartões) | **precisão 97%** no teste (98,4% na base inteira), lift 3,9× sobre o acaso |
 | Features | **42** por cartão na gold (`card_features`); o modelo usa **36** delas (`mlops/model_config.yml`) — as 6 restantes são contagens/valores brutos usados só no BI |
 | Testes | **37 pytest** (gerador, ingestão, lotes/quarentena, silver + qualidade, features, modelo, API, contrato de orquestração) + 1 paridade pandas × PySpark (roda no container Spark) · **17 testes dbt** (incl. paridade SQL × Python) |
+| Custo real no Azure | **R$ 19,41** para dois deploys completos, as execuções do pipeline e cerca de dois dias de recursos no ar |
 
 Cada alerta vem com o **motivo** (SHAP). Exemplo real da fila:
 
@@ -31,40 +41,65 @@ Cada alerta vem com o **motivo** (SHAP). Exemplo real da fila:
    linhas diferentes: 27 (+0,97) · erros de leitura no validador (+0,68)
 ```
 
-![Distribuição do score por classe](mlops/reports/figures/score_distribuicao.png)
+![Fila de auditoria no Power BI](docs/powerbi/02_fila_de_auditoria.jpg)
+
+---
+
+## Executado no Azure
+
+O projeto foi implantado numa assinatura **Azure for Students** (região Brasil Sul) com o
+[`deploy.sh`](mlops/infra/deploy.sh), executado de ponta a ponta e depois removido para zerar o custo.
+
+| Data | O que aconteceu |
+|---|---|
+| 02/11/2026 | Primeiro deploy: Bicep, imagem da API no ACR, código no workspace, Unity Catalog, artefatos do ADF, carga dos 2.500 extratos e primeira execução — as seis atividades passaram |
+| 03/11/2026 | Segundo deploy do zero (o primeiro grupo foi apagado) e registro das evidências abaixo |
+| 04/11/2026 | Grupo de recursos, grupo gerenciado do Databricks e objetos do Unity Catalog apagados — custo zerado |
+
+A API e o workspace **não estão mais no ar**; as evidências ficam em [`docs/evidencias`](docs/evidencias).
+Tudo pode ser recriado com o `deploy.sh`.
+
+**Pipeline no Data Factory** — Copy → Bronze → Silver → Gold → TreinoScore, com a atividade `Fail` para
+qualidade bloqueante:
+
+![Execução do pipeline no ADF](docs/evidencias/01_adf_pipeline_execucao.jpg)
+
+**Treino no Databricks** — as métricas impressas pelo notebook são as mesmas da execução local
+(ROC-AUC 0,916, precisão@10% 0,973):
+
+![Notebook de treino no Databricks](docs/evidencias/05_databricks_treino_metricas.jpg)
+
+| Evidência | O que comprova |
+|---|---|
+| [Desenho do pipeline](docs/evidencias/02_adf_pipeline_desenho.jpg) | Atividades, dependências e parâmetros do `pl_medallion_smart_ticket` |
+| [Lake medallion](docs/evidencias/03_adls_lakehouse_medallion.jpg) | Contêiner `lakehouse` com `bronze`, `silver`, `gold` e `ml` no ADLS Gen2 |
+| [Qualidade na silver](docs/evidencias/04_databricks_silver_qualidade.jpg) | As 20 checagens com `OK` no job cluster |
+| [`gold.card_scores` no Unity Catalog](docs/evidencias/06_unity_catalog_card_scores.jpg) | A fila de auditoria como tabela governada, consultada no SQL Warehouse |
+| [Linhagem](docs/evidencias/07_unity_catalog_linhagem.jpg) | `card_scores` escrita pelo notebook de treino, rastreada pelo Unity Catalog |
+| [API no Container Apps](docs/evidencias/08_api_consulta_cartao.jpg) | `GET /cards/{id}` devolvendo o cartão nº 1 da fila com resposta 200 |
+| [Análise de custo](docs/evidencias/09_azure_custo_total.jpg) | Custo do grupo principal no portal (o grupo gerenciado do Databricks é cobrado à parte — tabela abaixo) |
+
+**Custo real** (API do Gerenciamento de Custos, 01 a 05/11/2026, os dois grupos de recursos):
+
+| Grupo | Serviço | Custo |
+|---|---|---|
+| gerenciado pelo Databricks | NAT Gateway da rede dos clusters | R$ 8,22 |
+| gerenciado pelo Databricks | VMs dos job clusters (`D4ds_v4`) | R$ 3,68 |
+| principal | Azure Databricks (DBU dos jobs e do SQL Warehouse) | R$ 2,15 |
+| principal | Storage (ADLS Gen2) | R$ 1,70 |
+| principal | Container Registry | R$ 1,25 |
+| gerenciado pelo Databricks | Virtual Network | R$ 0,90 |
+| gerenciado pelo Databricks | Storage do workspace | R$ 0,68 |
+| principal | Container Apps | R$ 0,47 |
+| principal | Data Factory | R$ 0,36 |
+| | **Total** | **R$ 19,41** |
+
+O maior item não foi computação: o **NAT Gateway** que o Databricks cria para os clusters saírem sem IP
+público cobra por hora enquanto o workspace existe, mesmo sem nenhum cluster ligado.
 
 ---
 
 ## Arquitetura
-
-```
-                 ┌──────────────────────┐
-                 │      Azure ADF       │  Copy landing → raw (particionado por data)
-                 │  Orquestração        │  + notebooks Databricks em sequência
-                 └──────────┬───────────┘
-                            │
-                            ▼
-                 ┌──────────────────────┐
-                 │ Azure Databricks     │  PySpark: bronze → silver (qualidade) → gold
-                 │ PySpark / ETL        │
-                 └──────────┬───────────┘
-                            │
-                            ▼
-                 ┌──────────────────────┐
-                 │ Data Lake / Storage  │  ADLS Gen2 + Delta Lake (medallion)
-                 └──────────┬───────────┘
-                            │
-                            ▼
-                 ┌──────────────────────┐
-                 │ ML Pipeline          │  Isolation Forest · SHAP · clusters
-                 └──────────┬───────────┘      └─► gold/card_scores ─► Power BI
-                            │
-                            ▼
-                 ┌──────────────────────┐
-                 │ FastAPI              │  /score/transactions · /cards/{id}
-                 │ Container Apps       │
-                 └──────────────────────┘
-```
 
 ```mermaid
 flowchart LR
@@ -90,143 +125,7 @@ O mesmo fluxo existe em dois ambientes, com o mesmo código de regra:
 | silver | `src/data_pipeline/silver.py` + `quality.py` | `spark/02_silver_transform.py` (mesmo contrato de qualidade) |
 | gold | `src/feature_engineering/` | `spark/03_gold_features.py` → `features_spark.py` (teste de paridade) |
 | modelo | `src/training/train.py` | `spark/04_train_score.py` (chama o mesmo `train`) |
-
----
-
-## Estrutura
-
-```
-smart-ticket-fraud-detection/
-├── data/
-│   ├── raw/                  extratos .xlsx gerados (não versionados)
-│   ├── processed/            bronze / silver / gold (só gold/card_scores versionado)
-│   └── synthetic/bases/      linhas, tarifas, frota DETRAN, 150 empregadoras
-├── notebooks/
-│   ├── 01_eda.ipynb
-│   ├── 02_feature_engineering.ipynb
-│   └── 03_modeling.ipynb
-├── src/
-│   ├── data_generator/       gerador ViaCard v4.4 (fraude materializada + rótulos por evento)
-│   ├── data_pipeline/        ingest · silver · quality · reference · sql/ (Postgres) · spark/ (Databricks)
-│   ├── feature_engineering/  42 features por cartão + tabelas do Power BI
-│   ├── models/               Isolation Forest · avaliação · SHAP · clusters
-│   ├── training/             treino, benchmarks, relatórios e figuras
-│   ├── api/                  FastAPI
-│   └── pipeline.py           orquestrador local (lê mlops/pipeline.yml)
-├── dbt/                      staging → marts em SQL + 17 testes (DuckDB local / Databricks no Azure)
-├── tests/
-├── docker/
-│   ├── Dockerfile            imagem da API
-│   └── Dockerfile.spark      Spark 4 + Delta para validar os notebooks
-├── mlops/
-│   ├── pipeline.yml          estágios do pipeline (local e ADF)
-│   ├── model_config.yml      features, hiperparâmetros, fila de auditoria
-│   ├── adf/                  linked services, datasets, pipeline, trigger (formato Git do ADF)
-│   ├── infra/                main.bicep + deploy.sh
-│   ├── powerbi/              modelo semântico + medidas DAX
-│   ├── artifacts/            model.joblib + model_card.json
-│   └── reports/              metrics.md, recall por tipo, alertas explicados, figuras
-├── .github/workflows/ci.yml
-├── docker-compose.yml
-├── requirements.txt          projeto + API + testes (.venv)
-├── requirements-dbt.txt      dbt em ambiente separado (.venv-dbt): fixa outro pydantic
-└── README.md
-```
-
-Fora do repositório, na pasta do Case: `04.2 - Dados Brutos - Lotes` (lotes 1–9), `04.3 - Bases de
-Referência`, `04.4 - Extrato Modelo e Prompts do Gerador`, `04.5 - Power BI` (`.pbix` + projeto PBIP).
-
----
-
-## Como rodar
-
-Pré-requisitos: Python 3.14, Docker. Tudo a partir da raiz do repositório.
-
-```bash
-pip install -r requirements.txt
-```
-
-```bash
-python -m src.data_generator.run --n 2500 --seed 0 --overwrite
-```
-
-```bash
-python -m src.pipeline
-```
-
-```bash
-pytest -q
-```
-
-dbt (ambiente próprio; o estágio `dbt_marts` do pipeline o encontra em `.venv-dbt`):
-
-```bash
-python -m venv .venv-dbt
-```
-
-```bash
-.venv-dbt/Scripts/pip install -r requirements-dbt.txt
-```
-
-```bash
-cd dbt && ../.venv-dbt/Scripts/python -m dbt.cli.main build --profiles-dir .
-```
-
-`python -m dbt.cli.main` faz o mesmo que `dbt` e continua funcionando se a pasta do projeto for movida
-ou renomeada — o lançador `dbt.exe` do venv guarda o caminho absoluto antigo e quebra.
-
-Spark local (Windows): use o container (`docker compose --profile spark …`). O Spark nativo no Windows
-exige `winutils.exe`/`hadoop.dll`, que a Apache não distribui, e o `.cmd` de inicialização falha em
-caminhos com parênteses.
-
-API (imagem com modelo e scores embutidos):
-
-```bash
-docker compose up -d --build api
-```
-
-```bash
-curl localhost:8000/cards/42.973302951-4
-```
-
-Fundamentos de SQL (carrega silver/gold no Postgres e grava `src/data_pipeline/sql/03_respostas.md`):
-
-```bash
-docker compose up -d postgres
-```
-
-```bash
-python -m src.data_pipeline.sql.load_postgres
-```
-
-Notebooks Databricks + paridade pandas × PySpark, num Spark 4 local:
-
-```bash
-docker compose --profile spark run --rm -e RAW_PATH=/workspace/data/raw/amostra_40 spark
-```
-
-```bash
-docker compose --profile spark run --rm spark pytest -q tests/test_spark_parity.py
-```
-
-O comando padrão roda os notebooks 01–03. Para incluir o `04_train_score` e o registro no catálogo,
-instale no container as bibliotecas que o ADF instala na atividade `TreinoScore` (validado em 02/11/2026
-na amostra: 40 arquivos, 122.961 transações, silver 15/15, 42 features, 4 alertas):
-
-```bash
-docker compose --profile spark run --rm -e RAW_PATH=/workspace/data/raw/amostra_40 -e LAKE_ROOT=/workspace/data/processed/lakehouse_amostra -e CATALOG=spark_catalog spark bash -lc 'pip install -q scikit-learn==1.9.1 shap==0.52.0 tabulate==0.10.0 matplotlib joblib && for nb in 01_bronze_ingest 02_silver_transform 03_gold_features 04_train_score; do python src/data_pipeline/spark/$nb.py || exit 1; done'
-```
-
-No **Git Bash**, rode antes `export MSYS_NO_PATHCONV=1`: sem isso o Git Bash converte `/workspace/...` em um
-caminho do Windows (`C:/Program Files/Git/workspace/...`) e o Spark falha com
-`No FileSystem for scheme "C"`. No PowerShell não é preciso.
-
-Deploy no Azure (depois de `az login`; o Databricks CLI usa o mesmo login): [`mlops/infra/deploy.sh`](mlops/infra/deploy.sh).
-
-Power BI: `python -m src.data_pipeline.export_bi` grava em `data/processed/powerbi` a gold do
-`viacard_v44` (2.500 cartões, fila de 250), que é o que o relatório *Fila de Auditoria* lê — passo a passo no
-[**guia do Power BI**](mlops/powerbi/README.md). As gerações antigas de extratos (lotes 1 a 9, 13,8 mil
-cartões) servem só de prova negativa e de comparação: veja o [**Manual dos lotes**](MANUAL_LOTES.md).
+| marts SQL | dbt sobre DuckDB | dbt sobre Databricks SQL (alvo `azure`) |
 
 ---
 
@@ -285,6 +184,9 @@ corrompido vira linha em `files.erro`, não derruba o lote.
 **Gold** — `card_features` (1 linha por cartão, 42 features) e fatos para o Power BI
 (`fato_embarques_diario`, `fato_embarques_mensal` — o que o relatório consome —, `fato_recargas_mensal`).
 
+**dbt** ([`dbt/`](dbt)) — 11 modelos (staging → marts) e 17 testes sobre a gold, incluindo a paridade
+exata entre o SQL e o Python.
+
 ---
 
 ## Features
@@ -322,6 +224,8 @@ operação real quase não há fraude confirmada). Benchmarks no mesmo teste:
 Com uma fila do tamanho da prevalência (25% dos cartões), o Isolation Forest acerta **75%** e captura
 75% das fraudes; o teto supervisionado chega a 90%.
 
+![Distribuição do score por classe](mlops/reports/figures/score_distribuicao.png)
+
 ![Recall por tipo](mlops/reports/figures/recall_por_tipo.png)
 
 **Leitura honesta dos limites:**
@@ -338,6 +242,26 @@ Explicabilidade: SHAP (TreeExplainer) sobre o Isolation Forest, com motivos em p
 ([`alertas_explicados.csv`](mlops/reports/alertas_explicados.csv)). Perfis: KMeans (k=4 por silhouette) —
 um dos clusters concentra 100% de fraude (uso espalhado em ~10 linhas) e o maior (1.538 cartões,
 rotina numa linha só) tem 12%.
+
+---
+
+## Power BI
+
+Relatório **Fila de Auditoria** em 4 páginas, lendo só a gold (nenhuma regra de negócio no Power BI,
+só medidas). Modelo em estrela com 6 tabelas, 6 relacionamentos e 24 medidas DAX; tema escuro-pastel
+próprio ([`tema_smart_ticket_escuro.json`](mlops/powerbi/tema_smart_ticket_escuro.json)) e páginas
+geradas por código ([`gerar_relatorio_pbir.py`](mlops/powerbi/gerar_relatorio_pbir.py), formato PBIR).
+
+| Página | Pergunta | Números |
+|---|---|---|
+| Operação | Como o sistema está sendo usado? | 8M embarques · R$ 43,78M · ticket R$ 5,91 |
+| Fila de auditoria | Quais cartões auditar primeiro, e por quê? | 250 em alerta (10%) · R$ 4,46M |
+| Perfis | Onde o risco se concentra? | cluster 3 com 67,7% dos cartões em alerta |
+| Qualidade do modelo | A fila acerta? | precisão 98,4% · recall 39,7% · 619 fraudes |
+
+![Qualidade do modelo no Power BI](docs/powerbi/04_qualidade_do_modelo.jpg)
+
+Passo a passo da construção, do modelo às páginas, no [**guia do Power BI**](mlops/powerbi/README.md).
 
 ---
 
@@ -358,27 +282,24 @@ Documentação interativa em `localhost:8000/docs`.
 ## Nuvem (Azure)
 
 - **ADF** ([`mlops/adf`](mlops/adf)): Copy landing → raw particionado por data, notebooks Bronze → Silver
-  → Gold → TreinoScore em job cluster efêmero de nó único (`Standard_D4ds_v4`), atividade `Fail` com código
-  `DQ_SILVER` quando a qualidade bloqueia, trigger diário às 02:00.
+  → Gold → TreinoScore em job cluster efêmero de nó único (`Standard_D4ds_v4`, runtime 17.3 LTS),
+  atividade `Fail` com código `DQ_SILVER` quando a qualidade bloqueia, trigger diário às 02:00 (criado parado).
 - **Databricks** ([`src/data_pipeline/spark`](src/data_pipeline/spark)): notebooks em formato fonte
-  (versionáveis), Delta por caminho registrado como tabela externa no Unity Catalog (`smart_ticket.<camada>.<tabela>`, widget `catalog`), `OPTIMIZE ZORDER BY card_id`. Validados
-  localmente em Spark 4 + Delta 4 no container `docker/Dockerfile.spark` e executados no Azure Databricks
-  (runtime 17.3 LTS) a partir de `/Workspace/Shared/smart-ticket-fraud-detection` (`databricks sync`).
+  (versionáveis), Delta por caminho registrado como tabela externa no Unity Catalog
+  (`smart_ticket.<camada>.<tabela>`, widget `catalog`), `OPTIMIZE ZORDER BY card_id`. Validados
+  localmente em Spark 4 + Delta 4 (`docker/Dockerfile.spark`) e executados a partir de
+  `/Workspace/Shared/smart-ticket-fraud-detection` (`databricks sync`).
 - **Infra** ([`mlops/infra/main.bicep`](mlops/infra/main.bicep)): ADLS Gen2 sem chave compartilhada,
   ADF e Databricks com identidade gerenciada + RBAC, ACR, Container Apps escalando a zero.
-  O `deploy.sh` (checagem de cota + 7 passos) também prepara o Unity Catalog: credencial do access connector,
-  locais externos, catálogo/schemas, permissões da MSI do ADF e a política de cluster `stf-uc-jobs`
-  ([`cluster_policy.json`](mlops/infra/cluster_policy.json): nó único, modo dedicado à MSI do ADF).
+  O `deploy.sh` (checagem de cota + 7 passos) também prepara o Unity Catalog: credencial do access
+  connector, locais externos, catálogo/schemas, permissões da MSI do ADF e a política de cluster
+  `stf-uc-jobs` ([`cluster_policy.json`](mlops/infra/cluster_policy.json): nó único, modo dedicado à MSI do ADF).
 - **CI** ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)): testes → build + smoke test da imagem →
-  push no ACR e nova revisão no Container Apps via OIDC (liga com a variável `AZURE_DEPLOY=true`). O login usa
-  a identidade gerenciada `stf-ci-identity`, federada ao ambiente `production` do repositório — não precisa
-  de app registration.
-- **Power BI** ([`mlops/powerbi`](mlops/powerbi)): esquema estrela sobre a gold e medidas DAX (operação,
-  fila de auditoria, perfis, qualidade do modelo).
+  push no ACR e nova revisão no Container Apps via OIDC. O job de deploy fica desligado (variável
+  `AZURE_DEPLOY`) enquanto não houver recursos no ar; o login usa a identidade gerenciada `stf-ci-identity`,
+  federada ao ambiente `production` do repositório — não precisa de app registration.
 
 ### Rodando numa conta Azure for Students
-
-A assinatura de estudante tem limites que o projeto já respeita:
 
 | Limite da assinatura | Como o projeto lida |
 |---|---|
@@ -388,20 +309,144 @@ A assinatura de estudante tem limites que o projeto já respeita:
 | Build remoto do ACR (ACR Tasks) pode vir bloqueado | imagem construída com Docker local (ou no runner do GitHub) e enviada com `docker push` |
 | Databricks trial recusado (`TrialSkuNotSupportedForSubscriptionType`) | workspace `premium` (padrão do `deploy.sh`); o cluster só existe enquanto o job roda |
 
-Custo de referência em Brasil Sul (preço público): VM `D4ds_v4` US$ 0,36/h + DBU de jobs Premium
-US$ 0,30 — menos de US$ 1 por execução completa do pipeline nos 2.500 extratos. Fixos:
-ACR Basic ~US$ 5/mês; Storage e Log Analytics, centavos. Para zerar tudo depois da demonstração:
-`az group delete -n rg-smart-ticket-fraud` (o grupo gerenciado do Databricks sai junto).
-
-Pré-requisitos na máquina: Azure CLI, Databricks CLI, Docker, `jq` e a extensão
+Referência de preço em Brasil Sul: VM `D4ds_v4` US$ 0,36/h + DBU de jobs Premium US$ 0,30 — menos de
+US$ 1 por execução completa do pipeline. O custo fixo que mais pesa é o NAT Gateway do grupo gerenciado do
+Databricks (cobrado por hora com o workspace no ar), seguido do ACR Basic. Para zerar tudo depois da demonstração:
+`az group delete -n rg-smart-ticket-fraud` (o grupo gerenciado do Databricks sai junto; se sobrar órfão,
+apague-o também). Pré-requisitos na máquina: Azure CLI, Databricks CLI, Docker, `jq` e
 `az extension add -n datafactory`.
 
-**Executado em 02/11/2026** nessa conta: a primeira execução do pipeline passou nas seis atividades em ~37 min
-(Copy 46 s · Bronze 13 min · Silver 11 min · Gold 7 min · TreinoScore 5 min, metade disso subindo o cluster),
-gravou `smart_ticket.silver.*` e `smart_ticket.gold.*` no Unity Catalog, e a API responde em Container Apps com
-o modelo carregado. As métricas do treino no Databricks são as mesmas do local (ROC-AUC 0,916, 250 alertas):
-o treino ordena a gold por `card_id`, porque o Spark não devolve as linhas na ordem do pandas e o split e o
-Isolation Forest dependem dela.
+---
+
+## Como rodar
+
+Pré-requisitos: Python 3.14, Docker. Tudo a partir da raiz do repositório.
+
+```bash
+pip install -r requirements.txt
+```
+
+```bash
+python -m src.data_generator.run --n 2500 --seed 0 --overwrite
+```
+
+```bash
+python -m src.pipeline
+```
+
+```bash
+pytest -q
+```
+
+dbt (ambiente próprio; o estágio `dbt_marts` do pipeline o encontra em `.venv-dbt`):
+
+```bash
+python -m venv .venv-dbt
+```
+
+```bash
+.venv-dbt/Scripts/pip install -r requirements-dbt.txt
+```
+
+```bash
+cd dbt && ../.venv-dbt/Scripts/python -m dbt.cli.main build --profiles-dir .
+```
+
+`python -m dbt.cli.main` faz o mesmo que `dbt` e continua funcionando se a pasta do projeto for movida
+ou renomeada — o lançador `dbt.exe` do venv guarda o caminho absoluto antigo e quebra.
+
+API (imagem com modelo e scores embutidos):
+
+```bash
+docker compose up -d --build api
+```
+
+```bash
+curl localhost:8000/cards/42.973302951-4
+```
+
+Fundamentos de SQL (carrega silver/gold no Postgres e grava `src/data_pipeline/sql/03_respostas.md`):
+
+```bash
+docker compose up -d postgres
+```
+
+```bash
+python -m src.data_pipeline.sql.load_postgres
+```
+
+Notebooks Databricks + paridade pandas × PySpark, num Spark 4 local (no Windows use o container: o Spark
+nativo exige `winutils.exe`/`hadoop.dll`, que a Apache não distribui):
+
+```bash
+docker compose --profile spark run --rm -e RAW_PATH=/workspace/data/raw/amostra_40 spark
+```
+
+```bash
+docker compose --profile spark run --rm spark pytest -q tests/test_spark_parity.py
+```
+
+O comando padrão roda os notebooks 01–03. Para incluir o `04_train_score` e o registro no catálogo,
+instale no container as bibliotecas que o ADF instala na atividade `TreinoScore`:
+
+```bash
+docker compose --profile spark run --rm -e RAW_PATH=/workspace/data/raw/amostra_40 -e LAKE_ROOT=/workspace/data/processed/lakehouse_amostra -e CATALOG=spark_catalog spark bash -lc 'pip install -q scikit-learn==1.9.1 shap==0.52.0 tabulate==0.10.0 matplotlib joblib && for nb in 01_bronze_ingest 02_silver_transform 03_gold_features 04_train_score; do python src/data_pipeline/spark/$nb.py || exit 1; done'
+```
+
+No **Git Bash**, rode antes `export MSYS_NO_PATHCONV=1`: sem isso o Git Bash converte `/workspace/...` em um
+caminho do Windows e o Spark falha com `No FileSystem for scheme "C"`. No PowerShell não é preciso.
+
+Power BI: `python -m src.data_pipeline.export_bi` grava em `data/processed/powerbi` a gold do
+`viacard_v44`, que é o que o relatório lê. As gerações antigas de extratos (lotes 1 a 9, 13,8 mil
+cartões) servem só de prova negativa e de comparação: veja o [Manual dos lotes](MANUAL_LOTES.md).
+
+Deploy no Azure (depois de `az login`; o Databricks CLI usa o mesmo login):
+
+```bash
+bash mlops/infra/deploy.sh
+```
+
+---
+
+## Estrutura
+
+```
+smart-ticket-fraud-detection/
+├── data/
+│   ├── raw/                  extratos .xlsx gerados (não versionados)
+│   ├── processed/            bronze / silver / gold (só gold/card_scores versionado)
+│   └── synthetic/bases/      linhas, tarifas, frota DETRAN, 150 empregadoras
+├── notebooks/                EDA, feature engineering e modelagem
+├── src/
+│   ├── data_generator/       gerador ViaCard v4.4 (fraude materializada + rótulos por evento)
+│   ├── data_pipeline/        ingest · silver · quality · reference · sql/ (Postgres) · spark/ (Databricks)
+│   ├── feature_engineering/  42 features por cartão + tabelas do Power BI
+│   ├── models/               Isolation Forest · avaliação · SHAP · clusters
+│   ├── training/             treino, benchmarks, relatórios e figuras
+│   ├── api/                  FastAPI
+│   └── pipeline.py           orquestrador local (lê mlops/pipeline.yml)
+├── dbt/                      staging → marts em SQL + 17 testes (DuckDB local / Databricks no Azure)
+├── tests/
+├── docker/
+│   ├── Dockerfile            imagem da API
+│   └── Dockerfile.spark      Spark 4 + Delta para validar os notebooks
+├── mlops/
+│   ├── pipeline.yml          estágios do pipeline (local e ADF)
+│   ├── model_config.yml      features, hiperparâmetros, fila de auditoria
+│   ├── adf/                  linked services, datasets, pipeline, trigger (formato Git do ADF)
+│   ├── infra/                main.bicep · deploy.sh · cluster_policy.json
+│   ├── powerbi/              guia, medidas DAX, tema e gerador das páginas (PBIR)
+│   ├── artifacts/            model.joblib + model_card.json
+│   └── reports/              metrics.md, recall por tipo, alertas explicados, figuras
+├── docs/
+│   ├── evidencias/           prints da execução no Azure
+│   └── powerbi/              as 4 páginas do relatório
+├── .github/workflows/ci.yml
+├── docker-compose.yml
+├── requirements.txt          projeto + API + testes (.venv)
+├── requirements-dbt.txt      dbt em ambiente separado (.venv-dbt): fixa outro pydantic
+└── README.md
+```
 
 ---
 
@@ -411,12 +456,12 @@ Isolation Forest dependem dela.
 |---|---|
 | Fund. — SQL | ✅ esquema Postgres + 11 perguntas de negócio com CTEs e window functions (LAG/LEAD, NTILE, gaps and islands, média móvel) — [`sql/`](src/data_pipeline/sql) |
 | Fund. — Docker | ✅ API + Postgres + Spark em containers |
-| Fund. — Cloud | ✅ deploy executado na conta Azure for Students (02/11/2026): ADF → Databricks → Unity Catalog e API no Container Apps; falta ligar o deploy pelo CI |
-| Fund. — Git | ✅ repositório com commits por etapa, publicado no GitHub (privado) com CI |
+| Fund. — Cloud | ✅ deploy executado duas vezes na conta Azure for Students (02 e 03/11/2026), com evidências e custo medido; recursos removidos em 04/11 |
+| Fund. — Git | ✅ commits por etapa, CI verde a cada push |
 | Sprint 1 — MVP | ✅ reprodutível do gerador ao score |
 | Sprint 2 — Pipeline | ✅ medallion local + Databricks/ADF · ✅ dbt (11 modelos, 17 testes, paridade com a gold; alvo `azure` = Databricks SQL) |
-| Sprint 3 — Qualidade/prova | ✅ checagens bloqueantes, pytest, métricas com rótulo, SHAP, clusters · ✅ `Fila de Auditoria.pbix` + projeto PBIP (4 páginas, 24 medidas) · 🟡 publicar no Power BI Service |
-| Sprint 4 — Deploy | ✅ API em Docker, CI, IaC · 🟡 publicação no Container Apps pendente de login |
+| Sprint 3 — Qualidade/prova | ✅ checagens bloqueantes, pytest, métricas com rótulo, SHAP, clusters · ✅ relatório Power BI (4 páginas, 24 medidas, tema próprio) · 🟡 publicar no Power BI Service (exige licença Pro) |
+| Sprint 4 — Deploy | ✅ API no Container Apps, CI, IaC · 🟡 deploy contínuo pelo CI (pronto, desligado sem recursos no ar) |
 
 ---
 
@@ -437,6 +482,26 @@ Isolation Forest dependem dela.
 - **Calamine em vez de openpyxl** na leitura, e NamedStyles na escrita do gerador: 75× e 4× mais rápidos.
 - **Picos mensais contra o próprio histórico** em vez de médias longas — fraude é episódica.
 
+### Lições da execução no Azure
+
+- **O Spark não garante a ordem das linhas.** A gold no Databricks era idêntica à local, valor a valor, mas o
+  modelo dava ROC-AUC 0,948 em vez de 0,916: o split treino/teste e a amostragem do Isolation Forest
+  dependiam da posição das linhas. O treino passou a ordenar por `card_id` (com teste), e o Databricks
+  reproduz o local em 90 de 91 métricas — só o tempo de execução difere.
+- **Apagar o grupo de recursos não apaga o Unity Catalog.** O metastore é regional: catálogo, locais
+  externos e credencial sobrevivem ao `az group delete`. O connector recriado tem o mesmo ID de recurso, mas
+  outra identidade, e a credencial antiga falhava com *user delegation key is not authorized*. O
+  `deploy.sh` agora recria a credencial quando ela é mais antiga que o connector.
+- **Conta de estudante tem regras próprias.** Databricks `trial` recusado, cota zero na família de VM
+  padrão e app registration bloqueada pela universidade — cada limite virou uma escolha explícita no
+  Bicep e no `deploy.sh`, com o passo 0 conferindo a cota antes de gastar qualquer coisa.
+- **Workspace parado também custa.** O NAT Gateway do grupo gerenciado do Databricks respondeu por 42% do
+  custo total (R$ 8,22 de R$ 19,41), sem nenhum cluster ligado. O portal, filtrado só pelo grupo principal,
+  mostrava R$ 5,67; o custo real apareceu ao incluir o grupo gerenciado. Em ambiente de estudo, o workspace
+  deve existir só durante as execuções.
+- **Mesmo runtime na validação e na nuvem.** O job cluster usa o 17.3 LTS (Spark 4.0), o mesmo do
+  container local; o 16.4 trazia Spark 3.5 e pandas 1.5, diferente do que os notebooks tinham sido testados.
+
 ---
 
 ## Narrativa de 2 minutos
@@ -451,7 +516,8 @@ Isolation Forest dependem dela.
 > Na engenharia, montei um medallion: bronze fiel ao arquivo, silver que reconstrói a ordem da dupla passada
 > e a continuidade do saldo — que é o que denuncia validador offline — com checagens de qualidade que param o
 > pipeline, e uma gold com uma linha por cartão. O mesmo código roda local, em notebooks Databricks
-> orquestrados pelo Data Factory, e dentro da API.
+> orquestrados pelo Data Factory, e dentro da API. Implantei tudo no Azure com Bicep, registrei as tabelas
+> no Unity Catalog e a execução inteira custou menos de vinte reais.
 >
 > O modelo é um Isolation Forest, sem rótulo, como seria em produção: ROC-AUC de 0,92 e 97% de precisão na
 > fila dos 10% mais suspeitos, com o motivo de cada alerta via SHAP. E eu mostro onde ele falha — fraudes

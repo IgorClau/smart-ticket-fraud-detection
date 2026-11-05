@@ -3,6 +3,16 @@
 O dashboard lê **apenas a camada gold**: nada de regra de negócio no Power BI, só medidas.
 Este guia cobre a conexão local (arquivos gerados pelo pipeline) e a conexão na nuvem (Databricks).
 
+**O resultado** — as 4 páginas do relatório *Fila de Auditoria*, com o tema escuro-pastel:
+
+![Operação](../../docs/powerbi/01_operacao.jpg)
+
+![Fila de auditoria](../../docs/powerbi/02_fila_de_auditoria.jpg)
+
+![Perfis](../../docs/powerbi/03_perfis.jpg)
+
+![Qualidade do modelo](../../docs/powerbi/04_qualidade_do_modelo.jpg)
+
 ---
 
 ## 1. Escolha a fonte
